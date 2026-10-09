@@ -172,9 +172,11 @@ function [dY, u, F, a] = stackDynamics(t, Y, S, E, mu, mode)
 x = Y(1); h = Y(2); vx = Y(3); vh = Y(4); m = Y(5); %#ok<NASGU>
 r = E.Re + h;
 g = mu / r^2;
-[~, rho] = earthModel(h, E);
+[~, rho, aSound] = earthModel(h, E);
 v = hypot(vx, vh);
-D = 0.5*rho*v^2*S.Cd*S.A;
+Cd = S.Cd;
+if E.machDrag, Cd = Cd * machDrag(v / aSound); end  % sound barrier
+D = 0.5*rho*v^2*Cd*S.A;
 
 switch mode
     case 'stage1'

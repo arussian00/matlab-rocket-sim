@@ -31,7 +31,7 @@ S.m1prop  = Pb.m_prop;             % Super Heavy propellant [kg]
 S.T1      = Pb.engAscent * Pb.T_eng;   % 33 Raptors [N]
 S.Isp1sl  = Pb.Isp_sl;
 S.Isp1vac = Pb.Isp_vac;
-S.reserve1= 450e3;     % propellant Super Heavy keeps for boostback + catch [kg]
+S.reserve1= 400e3;     % propellant Super Heavy keeps for boostback + catch [kg]
 
 S.m2dry   = Ps.m_dry;  % ship empty mass [kg]
 S.m2prop  = Ps.m_prop; % ship propellant [kg]
@@ -41,12 +41,14 @@ S.reserve2= 30e3;      % landing propellant kept in the header tanks [kg]
 S.mPay    = 10e3;      % test payload (e.g. Starlink mass simulators) [kg]
 S.gLimit  = 4;         % ship throttles down to keep acceleration below this [g]
 
-S.Cd      = 0.4;       % drag coefficient of the stack
+S.Cd      = 0.4;       % drag coefficient of the stack (subsonic; rises near Mach 1)
+S.thrBucket = 0.75;    % MAX-Q THROTTLE BUCKET: 33 engines throttle to 75%
+S.bucketMach = [0.6 0.8 1.5 1.8];   % ... ramping down from Mach 0.6-0.8, back up 1.5-1.8
 S.A       = Pb.A;
 
 S.tKick    = 8;        % start of pitch kick [s]
 S.kickDur  = 5;        % pitch kick lasts this long [s]
-S.kickDeg  = 1.5;      % pitch kick angle [deg]; then gravity turn
+S.kickDeg  = 0.8;      % pitch kick angle [deg]; then gravity turn
 
 S.hCoast   = 190e3;    % ship holds this altitude while it builds speed [m]
 S.perigee  = -50e3;    % cut-off when the orbit's perigee reaches this [m]
@@ -187,14 +189,21 @@ function [dY, u, F, aNG] = starshipStack(t, Y, S, E, mu, mode)
 h = Y(2); vx = Y(3); vh = Y(4); m = Y(5);
 r = E.Re + h;
 g = mu / r^2;
-[~, rho] = earthModel(h, E);
+[~, rho, aSound] = earthModel(h, E);
 v = hypot(vx, vh);
-D = 0.5*rho*v^2*S.Cd*S.A;
+M = v / aSound;                                     % Mach number
+Cd = S.Cd;
+if E.machDrag, Cd = Cd * machDrag(M); end           % sound barrier
+D = 0.5*rho*v^2*Cd*S.A;
 
 switch mode
     case 'stack'
-        % Straight up, short pitch kick, then GRAVITY TURN (thrust along velocity)
-        F   = S.T1;
+        % Straight up, short pitch kick, then GRAVITY TURN (thrust along velocity).
+        % Max-q throttle bucket: ease off through the sound barrier, where
+        % dynamic pressure and drag loads on the structure are highest.
+        mb  = S.bucketMach;
+        w   = min(max((M - mb(1))/(mb(2) - mb(1)), 0), 1) * min(max((mb(4) - M)/(mb(4) - mb(3)), 0), 1);
+        F   = S.T1 * (1 - (1 - S.thrBucket)*w);
         Isp = S.Isp1vac - (S.Isp1vac - S.Isp1sl)*rho/E.rho0;
         if t < S.tKick || v == 0
             u = [0; 1];

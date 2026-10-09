@@ -44,6 +44,8 @@ P.diam     = 3.5;      % body diameter [m]
 P.L        = 40;       % body length [m] (used for moment of inertia and lever arm)
 P.Cd_up    = 0.5;      % drag coefficient when climbing nose-first
 P.Cd_down  = 1.0;      % drag coefficient when falling engines-first (with drag brakes)
+P.machDrag = true;     % drag rises through the sound barrier (machDrag.m). false = constant Cd
+P.atmosphere = 'us76'; % 'us76' = U.S. Standard Atmosphere 1976, 'exponential' = old simple model
 P.CLside   = 0;        % side-on lift coefficient (lift = q*CLside*Aside*sin(a)*cos(a)).
                        % 0 = no lift (slender boosters).
 P.CdSide   = 0;        % extra drag coefficient when the body is crossways to the air,
@@ -113,6 +115,7 @@ P.wnDivert     = 0.3;    % sideways correction gain [1/s]
 P.divertFadeAlt= 50;     % stop chasing the pad position below this altitude [m]
 P.divertTauMin = 2.5;    % sideways-speed correction time constant, min [s]
 P.divertTauMax = 3.0;    % ... and max [s]
+P.brakeGmax    = Inf;    % 'brake' phase thrust acceleration limit [g] (Inf = full thrust)
 P.brakeEndFrac = 0.6;    % 'brake' phase ends once the engLand engines could
                          % give the needed thrust at 60% throttle (gentle finish)
 
@@ -193,6 +196,8 @@ switch lower(vehicle)
         P.engBoost  = 13;         % boostback on the inner 13 engines
         P.engEntry  = 0;          % no entry burn
         P.engBrake  = 13;         % landing burn lights 13 engines ...
+        P.brakeGmax = 5;          % ... throttled so the engines add at most 5 g
+                                  % (air drag adds ~5 g more at that speed)
         P.engLand   = 3;          % ... and finishes on the 3 centre engines
         P.finCLA    = 25;         % four big grid fins
         P.maxTiltDeg = 30;        % it falls in at an angle: tilt the landing burn

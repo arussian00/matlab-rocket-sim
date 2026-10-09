@@ -164,7 +164,7 @@ function [dX, aux] = boosterDynamics(t, X, P, phase)
 % --- unpack the state ---------------------------------------------------
 x = X(1); h = X(2); vx = X(3); vh = X(4); m = X(5); theta = X(6); omega = X(7);
 r = P.Re + h;                       % distance from Earth's center
-[g, rho] = earthModel(h, P);
+[g, rho, aSound] = earthModel(h, P);
 mDry = P.m_dry * P.dryScale;
 
 % --- 1. GUIDANCE: where should we point, and how hard should we push? ----
@@ -191,6 +191,7 @@ w   = windAt(h, P);
 vRel = [vx - w; vh];               % velocity relative to the (moving) air
 vr  = norm(vRel);
 if vh >= 0, Cd = P.Cd_up; else, Cd = P.Cd_down; end
+if P.machDrag, Cd = Cd * machDrag(vr / aSound); end   % sound barrier
 q   = 0.5 * rho * vr^2;            % dynamic pressure [Pa]
 % End-on drag, plus side-on drag when the body is crossways to the air
 % (CdSide = 0 for slender boosters; large for Starship's belly-flop).
@@ -318,8 +319,11 @@ switch phase
         aCmd     = landingAccel(X, P);
         thetaCmd = atan2(aCmd(1), aCmd(2));
         thrReq   = norm(aCmd) * m / (enginesLit(phase, P) * P.T_eng);
-        if strcmp(phase, 'brake'), thrReq = 1; end   % brake hard until the landing
-                                                     % engines can take over
+        if strcmp(phase, 'brake')
+            % Brake hard until the landing engines can take over, but keep
+            % the thrust acceleration under brakeGmax to spare the structure.
+            thrReq = burnCapacity('brake', P, m) / (enginesLit('brake', P) * P.T_eng);
+        end
 
     otherwise
         error('Unknown phase "%s".', phase);
@@ -433,7 +437,7 @@ switch phase
             % (1) landing-burn ignition: thrust needed reaches ignFrac of max
             if vh < 0 && h < P.ignAlt
                 aCmd = landingAccel(X, P);
-                v1 = m*norm(aCmd) - P.ignFrac * enginesLit(nextPhase, P) * P.T_eng;
+                v1 = m*norm(aCmd) - P.ignFrac * burnCapacity(nextPhase, P, m);
             else
                 v1 = -1;
             end
@@ -497,11 +501,19 @@ function ds = ballistic(s, m, P)
 % Unpowered point-mass equations used by predictImpact.
 h = s(2); vx = s(3); vh = s(4);
 r = P.Re + h;
-[g, rho] = earthModel(h, P);
+[g, rho, aSound] = earthModel(h, P);
 v = hypot(vx, vh);
 if vh >= 0, Cd = P.Cd_up; else, Cd = P.Cd_down; end
+if P.machDrag, Cd = Cd * machDrag(v / aSound); end
 k = 0.5*rho*v*Cd*P.A/m;
 ds = [vx*P.Re/r; vh; -k*vx - vx*vh/r; -k*vh - g + vx^2/r];
+end
+
+function F = burnCapacity(phase, P, m)
+% Most thrust the guidance may use in a powered descent phase [N]:
+% all lit engines at full throttle, capped in 'brake' by the g-limit.
+F = enginesLit(phase, P) * P.T_eng;
+if strcmp(phase, 'brake'), F = min(F, P.brakeGmax * P.g0 * m); end
 end
 
 function n = enginesLit(phase, P)
