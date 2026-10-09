@@ -22,6 +22,7 @@ function animateStarship(B, Sh, tSep, speed, fps, gifFile)
 if nargin < 4 || isempty(speed), speed = 1;  end
 if nargin < 5 || isempty(fps),   fps   = 20; end
 if nargin < 6,                   gifFile = ''; end
+octaveCompat();                                   % Octave support (no-op in MATLAB)
 Pb = B.P;  Ps = Sh.P;
 cB = [0.85 0.25 0.15];                 % Super Heavy colour in graphs
 cS = [0.10 0.35 0.85];                 % Starship colour in graphs
@@ -139,7 +140,7 @@ set(axT{5}, 'YLim', [0 110]);
 
 %% STEP 4 - Play
 for k = 1:numel(tf)
-    if ~isvalid(fig), return; end                 % window closed: stop quietly
+    if ~ishghandle(fig), return; end                 % window closed: stop quietly
     tk = tf(k);
 
     % Trajectory overview: trails, and limits that grow with the flight

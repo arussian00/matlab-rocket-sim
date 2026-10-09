@@ -8,6 +8,11 @@ function rocket_app()
 %   runs simulateBooster with those values and refreshes the four plots and
 %   the summary. ANIMATE plays the last flight in a separate window.
 
+if exist('OCTAVE_VERSION', 'builtin')
+    error(['rocket_app needs MATLAB: Octave has no uifigure/uislider. ' ...
+           'In Octave, edit the values at the top of rocket_hop_sim.m instead.']);
+end
+
 %% STEP 1 - Window and layout
 fig  = uifigure('Name', 'Rocket Hop Simulator', 'Position', [60 60 1250 720]);
 main = uigridlayout(fig, [1 2]);
@@ -95,7 +100,7 @@ lastOut = [];   % shared with the nested callbacks below
 
     function drawResults(out, M)
         X = out.X; t = out.t; P = out.P;
-        C = lines(numel(out.phaseList));
+        C = phaseColors(numel(out.phaseList));
 
         cla(axTraj); hold(axTraj, 'on'); grid(axTraj, 'on');
         for k2 = 1:numel(out.phaseList)

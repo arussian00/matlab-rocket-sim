@@ -8,7 +8,9 @@ Simulates a rocket that launches to space and lands back on Earth:
 
 On top of that there is a **Monte Carlo** study (many flights with random errors) and a **slider app**.
 
-Everything runs on **MATLAB Online Basic** (the free tier). It uses core MATLAB only: no Simulink and no toolboxes.
+**What to add next:** see [ROADMAP.md](ROADMAP.md), a pick-up list of upgrades with effort levels.
+
+Everything runs on **MATLAB Online Basic** (the free tier) and on **GNU Octave** (free, no time limit; see [Running in GNU Octave](#running-in-gnu-octave-free-no-time-limit)). It uses core MATLAB only: no Simulink and no toolboxes.
 
 ---
 
@@ -73,7 +75,29 @@ rocket_hop_sim
 | `rocket_monte_carlo` | 50 flights with random errors, plus statistics plots | ~1–3 min |
 | `rocket_two_stage_sim` | Two-stage launch to orbit and booster drone-ship landing | ~10 s plus the animation |
 | `rocket_starship_sim` | Starship flight test from the launch pad: hot staging, booster tower catch, ship belly-flop and splashdown, with a live two-camera animation | ~30 s, then ~2 min of animation |
-| `rocket_app` | Window with sliders. Change values and press **LAUNCH** | instant per run |
+| `rocket_app` | Window with sliders. Change values and press **LAUNCH** (MATLAB only) | instant per run |
+
+### Running in GNU Octave (free, no time limit)
+
+The whole project also runs in [GNU Octave](https://octave.org), a free MATLAB-compatible program you install on your own computer.
+
+**On a Mac:**
+1. Install Homebrew from [brew.sh](https://brew.sh) if you don't have it.
+2. In Terminal, run:
+   ```bash
+   brew install octave
+   git clone https://github.com/arussian00/matlab-rocket-sim.git
+   octave --gui
+   ```
+3. In Octave's Command Window, run `cd ~/matlab-rocket-sim`, then any of the commands in the table above.
+
+**What's different from MATLAB:**
+- **The plots look the same,** apart from small styling details. Octave lacks a few newer MATLAB plotting commands (`tiledlayout`, `nexttile`, `yline`, `xline`, `yyaxis`, `histogram`), so `octaveCompat.m` adds stand-ins from the `octave/` folder. It does this automatically when you run any script. In MATLAB it does nothing.
+- **`rocket_app` (the slider app) needs MATLAB.** Octave has no `uifigure`. In Octave, change the values at the top of `rocket_hop_sim.m` instead.
+- **Saving a GIF needs MATLAB.** In Octave the animations still play; the GIF step is skipped with a warning.
+- **Octave is slower**, roughly 2–4× for the simulations. The Starship script takes about a minute before its animation starts, and the 50-flight Monte Carlo about 8 minutes (lower `N` for a quicker look).
+
+**Don't add the `octave/` folder to MATLAB's path.** Its stand-ins would replace MATLAB's own plotting commands. `octaveCompat` only ever adds them in Octave.
 
 ---
 
@@ -97,6 +121,11 @@ rocket_hop_sim
 | `machDrag.m` | function | **New.** Drag multiplier versus Mach number (the sound barrier). |
 | `pointMassSegment.m` | function | **New.** Converts a point-mass ascent (stack, ship burn) into the same format as `simulateBooster` results. |
 | `fullFlight.m` | function | **New.** Puts the launch in front of a booster's return, so summaries, dashboards and animations start on the launch pad. |
+| `starshipStack.m`, `perigeeSECO.m`, `orbitOf.m` | functions | Starship ascent model, ship cut-off event, and perigee/apogee from a state (used by `rocket_starship_sim`). |
+| `stackDynamics.m`, `circularSECO.m` | functions | Two-stage ascent model and Stage 2 cut-off event (used by `rocket_two_stage_sim`). |
+| `evMECO.m` | function | Booster cut-off event, shared by both orbital scripts. |
+| `phaseColors.m` | function | One colour per flight phase (like MATLAB's `lines`, but the same in Octave). |
+| `octaveCompat.m` + `octave/` | function + folder | Makes everything run in GNU Octave (see the Quick start). Does nothing in MATLAB. |
 
 How they connect:
 
@@ -580,7 +609,7 @@ Nine tiles, each line colored by phase:
 | 7 | Printout |
 | 8 | Plots: Earth view, flat view, time histories, booster dashboard and animation (from the launch pad) |
 
-Local functions: `stackDynamics` (point-mass model with three modes; it also returns the thrust direction for drawing), `evMECO`, `evSECO`.
+Helper functions (each in its own file, so the script also runs in Octave): `stackDynamics.m` (point-mass model with three modes; it also returns the thrust direction for drawing), `evMECO.m`, `circularSECO.m`.
 
 ### `rocket_starship_sim.m`
 
@@ -597,7 +626,7 @@ Local functions: `stackDynamics` (point-mass model with three modes; it also ret
 | 9 | Live mission animation (`animateStarship`) |
 | 10 | Summary plots: Earth view, flat view, time histories and both 9-panel dashboards |
 
-Local functions: `starshipStack` (point-mass model: `'stack'` or `'ship'`; it also returns the thrust direction for drawing), `evMECO`, `evSECO`, `orbitOf` (perigee and apogee from a state).
+Helper functions (each in its own file, so the script also runs in Octave): `starshipStack.m` (point-mass model: `'stack'` or `'ship'`; it also returns the thrust direction for drawing), `evMECO.m`, `perigeeSECO.m`, `orbitOf.m` (perigee and apogee from a state).
 
 ### `animateStarship.m`
 
@@ -810,6 +839,8 @@ Roughly from easiest to hardest:
 | Problem | Fix |
 |---|---|
 | `Undefined function 'simulateBooster'` | All `.m` files must be in the **Current Folder**. Double-click the folder in the Files panel. |
+| Octave: `'tiledlayout' undefined` (or `yline`, `yyaxis` ...) | You called a plotting function directly before running a script. Run `octaveCompat` once, or run any of the scripts first. |
+| Octave: `rocket_app needs MATLAB` | Expected: the slider app uses MATLAB's `uifigure`, which Octave doesn't have. |
 | Mission-control panels look small | Maximize the figure window, or undock it (MATLAB Online opens figures in a docked panel). Lower `speed` in STEP 9 if your browser struggles to keep up. |
 | Animation is choppy | Browser rendering is slower than desktop MATLAB. Raise `speedup` (e.g. 20), or set `playAnimation = false`. |
 | `exportgraphics` error | GIF export needs R2022a or newer. MATLAB Online is always current, so this mainly applies to older desktop versions. |

@@ -1,6 +1,7 @@
 function fig = plotFlight(out)
 %PLOTFLIGHT  Nine-panel dashboard of a simulateBooster result.
 
+octaveCompat();                         % Octave support (no-op in MATLAB)
 P = out.P;
 t = out.t; X = out.X; a = out.aux;
 x = X(:,1); h = X(:,2); vx = X(:,3); vh = X(:,4); m = X(:,5);
@@ -8,7 +9,7 @@ spd = hypot(vx, vh);
 nPh = numel(out.phaseList);
 labels = cell(1, nPh);
 for k = 1:nPh, labels{k} = sprintf('%d: %s', k, out.phaseList{k}); end
-C = lines(nPh);                         % one color per phase
+C = phaseColors(nPh);                         % one color per phase
 
 fig = figure('Name', ['Flight data - ' P.vehicleName], 'Color', 'w', ...
              'Position', [40 40 1300 820]);
