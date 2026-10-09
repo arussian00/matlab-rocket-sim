@@ -8,6 +8,8 @@ Simulates a rocket that launches to space and lands back on Earth:
 
 On top of that there is a **Monte Carlo** study (many flights with random errors) and a **slider app**.
 
+**What to add next:** see [ROADMAP.md](ROADMAP.md), a pick-up list of upgrades with effort levels.
+
 Everything runs on **MATLAB Online Basic** (the free tier). It uses core MATLAB only: no Simulink and no toolboxes.
 
 ---
