@@ -72,7 +72,7 @@ rocket_hop_sim
 | `rocket_hop_sim` | One hop flight: summary, 9-panel dashboard, animation | ~5 s plus the animation |
 | `rocket_monte_carlo` | 50 flights with random errors, plus statistics plots | ~1–3 min |
 | `rocket_two_stage_sim` | Two-stage launch to orbit and booster drone-ship landing | ~10 s plus the animation |
-| `rocket_starship_sim` | Starship flight test: hot staging, booster tower catch, ship belly-flop and splashdown | ~30 s plus the animations |
+| `rocket_starship_sim` | Starship flight test from the launch pad: hot staging, booster tower catch, ship belly-flop and splashdown, with a live two-camera animation | ~30 s, then ~2 min of animation |
 | `rocket_app` | Window with sliders. Change values and press **LAUNCH** | instant per run |
 
 ---
@@ -92,6 +92,9 @@ rocket_hop_sim
 | `rocket_two_stage_sim.m` | script | **New.** Two-stage orbital launch; the booster lands on a drone ship. |
 | `rocket_app.m` | function | **New.** Interactive slider app (uifigure). |
 | `rocket_starship_sim.m` | script | **New.** Starship-style flight test: Super Heavy tower catch, ship belly-flop re-entry and splashdown. |
+| `animateStarship.m` | function | **New.** Live Starship mission view from the launch pad: both stages drawn in detail, two chase cameras, telemetry graphs that grow as the flight plays. |
+| `pointMassSegment.m` | function | **New.** Converts a point-mass ascent (stack, ship burn) into the same format as `simulateBooster` results. |
+| `fullFlight.m` | function | **New.** Puts the launch in front of a booster's return, so summaries, dashboards and animations start on the launch pad. |
 
 How they connect:
 
@@ -103,7 +106,9 @@ rocket_two_stage_sim ┤                          │
 rocket_starship_sim ─┘                          │
                                                 ├──> flightMetrics
                                                 ├──> plotFlight
-                                                └──> animateFlight
+                                                ├──> animateFlight
+                                                └──> animateStarship (Starship only)
+rocket_two_stage_sim, rocket_starship_sim ──> pointMassSegment ──> fullFlight
 ```
 
 ---
@@ -443,6 +448,21 @@ Modelled on SpaceX's Starship test flights. The numbers are rounded public estim
 - **Belly-flop:** the flaps hold the ship crossways to the air (`bellyAoADeg` = 90°), heat shield first. A new **side-drag** term, `CdSide · (diam·L) · |sin(angle to the air)|`, makes the broad side catch the air. That slows the ship to under 100 m/s, like a skydiver.
 - **Flip and landing burn:** at 1 km (`flipAlt`), two Raptors light, the ship swings upright in a few seconds, and the normal landing guidance brings it to a soft splashdown. The splashdown target is placed at the predicted impact point at the flip, the same way the drone ship is placed.
 
+**Step 6: the whole flight, from the launch pad.** `pointMassSegment` and `fullFlight` put the stack ascent (and, for the ship, its burn to orbit) in front of each vehicle's return. Every printout, dashboard and animation then starts at liftoff, not mid-air at stage separation.
+
+**Step 7: live mission animation (`animateStarship.m`).**
+
+| Panel | What you see |
+|---|---|
+| Trajectory (top left) | Both vehicles' paths drawn as they fly. The view zooms out as the flight grows. It also shows the mission clock, the current time-warp and a log of events (liftoff, max-Q, hot staging, boostback, catch, engine cut-off, entry, flip, splashdown). |
+| Super Heavy camera | Follows the booster. On the pad you see the full stack next to the tower. You then see hot staging (the ship's flame pushing on the booster), the flip, the boostback, the grid fins and the catch in the tower arms. |
+| Starship camera | Follows the ship: its burn, the belly-flop with the black heat shield facing the air, and the flip and landing burn before splashdown. |
+| Altitude, speed, g-load (bottom) | Live telemetry for both vehicles, drawn as the flight plays. |
+
+Both stages are drawn like the real ones. **Super Heavy** has a steel body, a dark vented hot-staging ring on top, grid fins near the top and an engine skirt. **Starship** has an ogive nose, two forward and two aft flaps, and a black heat-shield stripe along its belly.
+
+Time runs at 8× during launch and booster return, 150× during the quiet coast above 80 km, 30× during re-entry and 5× for the flip and landing. Change `speed` in STEP 9 to play everything faster or slower, or set `playAnimation = false` to skip it.
+
 ---
 
 ## 7. File-by-file walkthrough
@@ -531,11 +551,11 @@ Nine tiles, each line colored by phase:
 | 3 | Separation |
 | 4 | Stage 2 burn to SECO |
 | 5 | Orbit check and one orbit of coasting |
-| 6 | Booster return via `simulateBooster` |
+| 6 | Booster return via `simulateBooster`, then the stack ascent is joined on in front (`fullFlight`), so the booster's history starts on the pad |
 | 7 | Printout |
-| 8 | Plots: Earth view, flat view, time histories, booster dashboard and animation |
+| 8 | Plots: Earth view, flat view, time histories, booster dashboard and animation (from the launch pad) |
 
-Local functions: `stackDynamics` (point-mass model with three modes), `evMECO`, `evSECO`.
+Local functions: `stackDynamics` (point-mass model with three modes; it also returns the thrust direction for drawing), `evMECO`, `evSECO`.
 
 ### `rocket_starship_sim.m`
 
@@ -547,10 +567,23 @@ Local functions: `stackDynamics` (point-mass model with three modes), `evMECO`, 
 | 4 | Ship burn until the perigee reaches −50 km |
 | 5 | Super Heavy return and tower catch via `simulateBooster` |
 | 6 | Ship belly-flop re-entry and splashdown via `simulateBooster` |
-| 7 | Printout |
-| 8 | Plots: Earth view, flat view, time histories, both dashboards and animations |
+| 7 | Join the launch onto each vehicle's return (`pointMassSegment`, `fullFlight`), so everything starts on the pad |
+| 8 | Printout (liftoff to catch, liftoff to splashdown) |
+| 9 | Live mission animation (`animateStarship`) |
+| 10 | Summary plots: Earth view, flat view, time histories and both 9-panel dashboards |
 
-Local functions: `starshipStack` (point-mass model: `'stack'` or `'ship'`), `evMECO`, `evSECO`, `orbitOf` (perigee and apogee from a state).
+Local functions: `starshipStack` (point-mass model: `'stack'` or `'ship'`; it also returns the thrust direction for drawing), `evMECO`, `evSECO`, `orbitOf` (perigee and apogee from a state).
+
+### `animateStarship.m`
+
+| Part | What it does |
+|---|---|
+| STEP 1 | Builds the frame times with a variable time-warp (fast during the coast, slow for staging and landings). |
+| STEP 2 | Samples both flights at those times. It keeps the ship on top of the booster until hot staging, then lets it slide onto its own path. |
+| STEP 3 | Builds the six panels (overview, two cameras, three telemetry graphs). |
+| STEP 4 | The frame loop: moves both vehicles and their flames, grows the trails and graphs, and updates the clock and event log. It stops quietly if you close the window. |
+
+Helpers: `sampleFlight`, `missionEvents`, `buildCamera` (ground, ocean, tower and arms), `vehicleShapes` (the outlines of both stages), `drawVehicle`, `telemetryAxes`, `hudText`.
 
 ### `rocket_app.m`
 - **STEP 1** Window and layout.

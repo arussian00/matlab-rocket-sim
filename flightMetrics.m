@@ -54,7 +54,7 @@ fprintf('Liftoff / start mass  : %9.0f kg\n', m(1));
 for k = 1:numel(out.phaseList)
     if ~isnan(out.phaseStart(k))
         j = find(t >= out.phaseStart(k), 1);
-        fprintf('  %-10s starts  : t = %6.1f s   h = %7.2f km   v = %6.0f m/s\n', ...
+        fprintf('  %-12s starts: t = %6.1f s   h = %7.2f km   v = %6.0f m/s\n', ...
                 out.phaseList{k}, t(j), h(j)/1e3, hypot(vx(j), vh(j)));
     end
 end

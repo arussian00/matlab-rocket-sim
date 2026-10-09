@@ -87,7 +87,15 @@ Ps.m_dry = S.m2dry + S.mPay;              % payload stays on board (test flight)
 Xs0 = [Yseco(1:4); Yseco(5); atan2(Yseco(3), Yseco(4)); Yseco(3)/(Pb.Re + Yseco(2))];
 outS = simulateBooster(Ps, Xs0, tSECO, Ps.phaseList);
 
-%% STEP 7 - Print results
+%% STEP 7 - Stitch each vehicle's complete flight together, from the launch pad
+% Until hot staging both vehicles ARE the stack, so each history starts with
+% the stack ascent. The ship's also includes its burn to (almost) orbit.
+segA = pointMassSegment(tA, YA, Pb, @(t,Y) starshipStack(t, Y, S, Pb, mu, 'stack'));
+segC = pointMassSegment(tC, YC, Pb, @(t,Y) starshipStack(t, Y, S, Pb, mu, 'ship'));
+fullB = fullFlight({segA}, {'stack ascent'}, outB);
+fullS = fullFlight({segA, segC}, {'stack ascent', 'ship burn'}, outS);
+
+%% STEP 8 - Print results
 fprintf('\n================ STARSHIP ASCENT ================\n');
 fprintf('Engine cut-off (SECO) : t = %.1f s, h = %.1f km, speed = %.0f m/s\n', ...
         tSECO, Yseco(2)/1e3, hypot(Yseco(3), Yseco(4)));
@@ -95,17 +103,24 @@ fprintf('Trajectory            : %.0f x %.0f km (perigee below ground = re-enter
         perigee/1e3, apogee/1e3);
 fprintf('Ship propellant left  : %.1f t (landing reserve %.0f t)\n', ...
         (Yseco(5) - S.m2dry - S.mPay)/1e3, S.reserve2/1e3);
-flightMetrics(outB);
-Ms = flightMetrics(outS);
-iFlip = find(strcmp(outS.phaseList, 'landing'), 1);
-fprintf('Ship re-entry: max %.1f g, max q %.1f kPa, %.0f m/s at the flip, splashdown %.0f km downrange\n\n', ...
-        Ms.maxG, Ms.maxQ/1e3, Ms.landIgnSpeed, outS.X(end,1)/1e3);
-if ~isnan(outS.phaseStart(iFlip))
-    fprintf('Flight time to splashdown: %.1f min\n\n', outS.t(end)/60);
+flightMetrics(fullB);
+flightMetrics(fullS);
+Mr = flightMetrics(outS, false);            % re-entry only (after engine cut-off)
+fprintf('Ship re-entry: max %.1f g, max q %.1f kPa, %.0f m/s at the flip, splashdown %.0f km downrange\n', ...
+        Mr.maxG, Mr.maxQ/1e3, Mr.landIgnSpeed, outS.X(end,1)/1e3);
+fprintf('Flight time to splashdown: %.1f min\n\n', outS.t(end)/60);
+
+%% STEP 9 - Live mission animation, from the launch pad
+% Both vehicles, two chase cameras, and telemetry graphs that grow as the
+% flight plays. Time runs faster during the long quiet coast (shown on screen).
+playAnimation = true;    % set false to skip
+speed         = 1;       % 2 = twice as fast, 0.5 = slower
+if playAnimation
+    animateStarship(fullB, fullS, tSep, speed);
 end
 
-%% STEP 8 - Plots
-% 8a. Earth view (Earth-centered coordinates, km)
+%% STEP 10 - Summary plots (drawn after the animation)
+% 10a. Earth view (Earth-centered coordinates, km)
 toXY = @(x, h) deal((Pb.Re + h).*sin(x/Pb.Re)/1e3, (Pb.Re + h).*cos(x/Pb.Re)/1e3);
 [xA, yA] = toXY(YA(:,1), YA(:,2));
 [xC, yC] = toXY(YC(:,1), YC(:,2));
@@ -135,7 +150,7 @@ xlabel('Downrange [km]'); ylabel('Altitude [km]');
 title('Ascent and booster return (flat view)');
 legend('Stack ascent', 'Ship ascent', 'Super Heavy return', 'Launch tower', 'Location', 'best');
 
-% 8b. Altitude and speed of both vehicles vs time
+% 10b. Altitude and speed of both vehicles vs time
 figure('Name', 'Starship time histories', 'Color', 'w', 'Position', [60 60 1100 450]);
 subplot(1, 2, 1); hold on; grid on
 plot(tA/60, YA(:,2)/1e3, 'k', 'LineWidth', 2);
@@ -150,22 +165,19 @@ plot(outB.t/60, hypot(outB.X(:,3), outB.X(:,4)), 'r', 'LineWidth', 1.5);
 yline(sqrt(mu/(Pb.Re + S.hCoast)), '--', 'orbital speed');
 xlabel('Time [min]'); ylabel('Speed [m/s]'); title('Speed');
 
-% 8c. Full dashboards and animations
-plotFlight(outB);
-plotFlight(outS);
-playAnimations = true;   % set false to skip
-if playAnimations
-    animateFlight(outB, 10, 25);   % tower catch
-    animateFlight(outS, 30, 25);   % re-entry is long: play faster
-end
+% 10c. Full 9-panel dashboards, liftoff to touchdown
+plotFlight(fullB);
+plotFlight(fullS);
 
 
 %% =====================================================================
 %  LOCAL FUNCTIONS
 %  =====================================================================
-function dY = starshipStack(t, Y, S, E, mu, mode)
+function [dY, u, F, aNG] = starshipStack(t, Y, S, E, mu, mode)
 % Point-mass equations of motion on a round, non-rotating Earth.
 % mode: 'stack' (33 engines, gravity turn) or 'ship' (6 engines to orbit)
+% Extra outputs (for plots): thrust direction u, thrust F, and the
+% acceleration you would feel, aNG (everything except gravity).
 h = Y(2); vx = Y(3); vh = Y(4); m = Y(5);
 r = E.Re + h;
 g = mu / r^2;
@@ -178,7 +190,7 @@ switch mode
         % Straight up, short pitch kick, then GRAVITY TURN (thrust along velocity)
         F   = S.T1;
         Isp = S.Isp1vac - (S.Isp1vac - S.Isp1sl)*rho/E.rho0;
-        if t < S.tKick
+        if t < S.tKick || v == 0
             u = [0; 1];
         elseif t < S.tKick + S.kickDur
             u = [sind(S.kickDeg); cosd(S.kickDeg)];
@@ -197,8 +209,8 @@ switch mode
 end
 
 if v > 0, aDrag = -D*[vx; vh]/(v*m); else, aDrag = [0; 0]; end
-a  = F*u/m + aDrag;
-dY = [vx*E.Re/r; vh; a(1) - vx*vh/r; a(2) - g + vx^2/r; -F/(Isp*E.g0)];
+aNG = F*u/m + aDrag;
+dY = [vx*E.Re/r; vh; aNG(1) - vx*vh/r; aNG(2) - g + vx^2/r; -F/(Isp*E.g0)];
 end
 
 function [value, isterminal, direction] = evMECO(~, Y, mMECO)
