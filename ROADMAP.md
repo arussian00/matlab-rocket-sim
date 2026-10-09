@@ -33,7 +33,7 @@ A pick-up list for the next session. Each row is a self-contained addition: pick
 
 | # | Item | Effort | Why | Ask |
 |---|---|---|---|---|
-| 16 | **Run everything in real MATLAB** | 🟢 | All testing so far was in GNU Octave, with stand-ins for the MATLAB-only plotting commands (`tiledlayout`, `nexttile`, `yline`, `yyaxis`). Run the five scripts below in MATLAB and report any red errors. | "Here are the MATLAB errors I got: ..." |
+| 16 | **Run everything in real MATLAB** | 🟢 | The project now runs fully in GNU Octave, and that's where it has been tested. The changes for Octave were written to work in MATLAB too, but haven't been run there. Run the five scripts below in MATLAB and report any red errors. | "Here are the MATLAB errors I got: ..." |
 | 17 | **Automatic tests on GitHub** | 🟡 | A GitHub Action that runs every mission on each pull request (with Octave, which is free) and fails if a landing stops working. It catches mistakes before you merge. | "Set up automatic tests for this repo" |
 | 18 | **Speed up the simulations** | 🟡 | The Starship script takes ~30–50 s. Caching the atmosphere and loosening solver tolerances where safe could halve it, and make a Starship Monte Carlo practical. | "Make the simulations run faster" |
 | 19 | **Tidy the two-stage script** | 🟢 | `rocket_two_stage_sim` and `rocket_starship_sim` share a lot of point-mass code that could move into one shared function. | "Clean up the duplicated ascent code" |
@@ -54,6 +54,7 @@ The scripts to check in MATLAB (item 16): `rocket_hop_sim`, `rocket_monte_carlo`
 | Mach-dependent drag | `machDrag.m` |
 | Max-q throttle bucket and 4 g ship limit | `S.thrBucket`, `S.gLimit` |
 | g-limited booster landing burn | `brakeGmax` |
+| Runs in GNU Octave (free, no time limit) as well as MATLAB | `octaveCompat.m`, `octave/` |
 
 ## Where things stand
 

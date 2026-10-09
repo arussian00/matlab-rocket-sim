@@ -17,6 +17,7 @@
 %   rocket_app             - interactive app with sliders
 
 clear; close all; clc
+octaveCompat();          % also runs in GNU Octave (no-op in MATLAB)
 
 %% STEP 1 - Load parameters (edit rocket_params.m, or override here)
 P = rocket_params('hop');

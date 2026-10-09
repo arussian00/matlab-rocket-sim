@@ -13,6 +13,7 @@ function animateFlight(out, speedup, fps, gifFile)
 if nargin < 2 || isempty(speedup), speedup = 10;  end
 if nargin < 3 || isempty(fps),     fps     = 25;  end
 if nargin < 4,                     gifFile = '';  end
+octaveCompat();                                   % Octave support (no-op in MATLAB)
 P = out.P;
 
 %% STEP 1 - Resample the simulation onto evenly spaced animation frames
@@ -66,7 +67,7 @@ bodyY = [ 2    L*0.85 L*0.95 L L*0.95 L*0.85 2 0 0];
 
 %% STEP 3 - Draw every frame
 for k = 1:numel(tf)
-    if ~isvalid(fig), return; end                % window closed: stop quietly
+    if ~ishghandle(fig), return; end                % window closed: stop quietly
     % Body axes in the world: nose direction n, sideways direction s
     n = [sin(tha(k)); cos(tha(k))];
     s = [n(2); -n(1)];
@@ -88,15 +89,15 @@ for k = 1:numel(tf)
 
     % Sky color: blue near the ground, black in space
     sky = min(ha(k)/80e3, 1)^0.5;
-    ax2.Color = (1 - sky)*[0.53 0.81 0.98] + sky*[0.02 0.02 0.08];
+    set(ax2, 'Color', (1 - sky)*[0.53 0.81 0.98] + sky*[0.02 0.02 0.08]);
     yLo = max(ha(k) - 0.6*W, -0.2*W);
     axis(ax2, [xa(k) - W, xa(k) + W, yLo, yLo + 2*W]);
 
-    if sky > 0.5, hHud.Color = 'w'; else, hHud.Color = 'k'; end
-    hHud.String = sprintf(['T+%6.1f s\nPhase : %s\nAlt   : %8.2f km\nSpeed : %8.0f m/s\n' ...
+    if sky > 0.5, set(hHud, 'Color', 'w'); else, set(hHud, 'Color', 'k'); end
+    set(hHud, 'String', sprintf(['T+%6.1f s\nPhase : %s\nAlt   : %8.2f km\nSpeed : %8.0f m/s\n' ...
                            'Throt : %6.0f %%\nPitch : %6.1f deg\nGimbal: %6.1f deg\nProp  : %8.0f kg'], ...
         tf(k), out.phaseList{pa(k)}, ha(k)/1e3, va(k), 100*thr(k), rad2deg(tha(k)), ...
-        rad2deg(gim(k)), ma(k) - P.m_dry*P.dryScale);
+        rad2deg(gim(k)), ma(k) - P.m_dry*P.dryScale));
     drawnow
 
     if ~isempty(gifFile)
@@ -104,11 +105,11 @@ for k = 1:numel(tf)
     end
 end
 
-if ~isvalid(fig), return; end
+if ~ishghandle(fig), return; end
 M = flightMetrics(out, false);
 if M.success
-    hHud.String = [hHud.String newline 'SUCCESSFUL ' P.landingName];
+    set(hHud, 'String', [get(hHud, 'String') newline 'SUCCESSFUL ' P.landingName]);
 else
-    hHud.String = [hHud.String newline P.landingName ' FAILED'];
+    set(hHud, 'String', [get(hHud, 'String') newline P.landingName ' FAILED']);
 end
 end

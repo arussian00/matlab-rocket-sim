@@ -15,6 +15,7 @@
 % Runs on MATLAB Online Basic (core MATLAB only).
 
 clear; close all; clc
+octaveCompat();          % also runs in GNU Octave (no-op in MATLAB)
 
 %% STEP 1 - Parameters
 E = rocket_params('booster');     % reuse planet + atmosphere values
@@ -67,7 +68,7 @@ mBoost = Ysep(5) - mUpper;                    % booster with its reserve propell
 %% STEP 4 - Stage 2: short coast, then burn to orbit
 [tB, YB] = ode45(@(t,Y) stackDynamics(t, Y, S, E, mu, 'coast'), ...
                  [tSep, tSep + S.sepCoast], Yup, odeset('RelTol', 1e-8, 'MaxStep', 0.5));
-opts = odeset('Events', @(t,Y) evSECO(t, Y, S, E, mu), 'RelTol', 1e-8, 'AbsTol', 1e-6, 'MaxStep', 0.5);
+opts = odeset('Events', @(t,Y) circularSECO(t, Y, S, E, mu), 'RelTol', 1e-8, 'AbsTol', 1e-6, 'MaxStep', 0.5);
 [tC, YC] = ode45(@(t,Y) stackDynamics(t, Y, S, E, mu, 'stage2'), [tB(end), tB(end) + 1500], YB(end,:).', opts);
 tSECO = tC(end); Yseco = YC(end,:).';
 
@@ -158,70 +159,4 @@ plotFlight(fullB);
 playBoosterAnimation = true;
 if playBoosterAnimation
     animateFlight(fullB, 10, 25);   % from the launch pad
-end
-
-
-%% =====================================================================
-%  LOCAL FUNCTIONS
-%  =====================================================================
-function [dY, u, F, a] = stackDynamics(t, Y, S, E, mu, mode)
-% Point-mass equations of motion on a round, non-rotating Earth.
-% mode: 'stage1' (stack burning), 'stage2' (upper stage burning), 'coast'
-% Extra outputs (for plots): thrust direction u, thrust F, and the
-% acceleration you would feel, a (everything except gravity).
-x = Y(1); h = Y(2); vx = Y(3); vh = Y(4); m = Y(5); %#ok<NASGU>
-r = E.Re + h;
-g = mu / r^2;
-[~, rho, aSound] = earthModel(h, E);
-v = hypot(vx, vh);
-Cd = S.Cd;
-if E.machDrag, Cd = Cd * machDrag(v / aSound); end  % sound barrier
-D = 0.5*rho*v^2*Cd*S.A;
-
-switch mode
-    case 'stage1'
-        % STEERING: straight up, short pitch kick, then GRAVITY TURN
-        % (thrust along the velocity, so gravity gradually bends the path
-        %  over without the rocket ever flying sideways through thick air)
-        F   = S.T1;
-        Isp = S.Isp1vac - (S.Isp1vac - S.Isp1sl)*rho/E.rho0;
-        if t < S.tKick
-            u = [0; 1];
-        elseif t < S.tKick + S.kickDur
-            u = [sind(S.kickDeg); cosd(S.kickDeg)];
-        else
-            u = [vx; vh]/v;
-        end
-    case 'stage2'
-        % STEERING: split the available acceleration into a vertical part
-        % (a PD controller that drives altitude to hOrbit and vertical speed
-        % to zero) and use everything left over to build horizontal speed.
-        F   = S.T2;
-        Isp = S.Isp2;
-        aT  = F/m;
-        aUp = S.wnG^2*(S.hOrbit - h) - 2*S.zG*S.wnG*vh ...  % PD on altitude
-              + g - vx^2/r;                                % cancel net gravity
-        aUp = min(max(aUp, -aT), aT);
-        u   = [sqrt(max(aT^2 - aUp^2, 0)); aUp] / aT;
-    otherwise
-        F = 0; Isp = 1; u = [0; 0];
-end
-
-if v > 0, aDrag = -D*[vx; vh]/(v*m); else, aDrag = [0; 0]; end
-a  = F*u/m + aDrag;
-dY = [vx*E.Re/r; vh; a(1) - vx*vh/r; a(2) - g + vx^2/r; -F/(Isp*E.g0)];
-end
-
-function [value, isterminal, direction] = evMECO(~, Y, mMECO)
-% Stage 1 cut-off when only the landing reserve is left.
-value = Y(5) - mMECO; isterminal = 1; direction = -1;
-end
-
-function [value, isterminal, direction] = evSECO(~, Y, S, E, mu)
-% Stage 2 cut-off: (1) horizontal speed reaches circular-orbit speed,
-%                  (2) or stage 2 runs dry.
-r = E.Re + Y(2);
-value      = [Y(3) - sqrt(mu/r);  Y(5) - (S.m2dry + S.mPay)];
-isterminal = [1; 1];
-direction  = [+1; -1];
 end
