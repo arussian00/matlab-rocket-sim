@@ -14,7 +14,11 @@ function out = simulateBooster(P, X0, t0, phaseList)
 %                 'boostback' engine on, push back toward the landing pad
 %                 'coast'     engine off, fall engines-first, grid fins steer
 %                 'entry'     short burn to slow down before the thick air
-%                 'landing'   landing burn ("hoverslam") to touchdown
+%                 'bellyflop' engine off, fall belly-first (Starship-style re-entry)
+%                 'brake'     first part of the landing burn on more engines
+%                             (Super Heavy lights 13, then shuts 10 down)
+%                 'landing'   landing burn ("hoverslam") to touchdown, or down
+%                             to the tower arms (P.hLand > 0) for a catch
 %
 %   OUTPUT  struct with fields
 %     t, X            time vector and state history (one row per time)
@@ -62,6 +66,12 @@ for k = 1:numel(phaseList)
         P.bbDir = -sign(xImpact - P.xPad);
         if P.bbDir == 0, P.bbDir = -1; end
     end
+    if strcmp(name, 'bellyflop')
+        % Keep the nose pointing the way we are travelling, so the ship never
+        % has to spin round when its sideways speed passes through zero.
+        P.bellyDir = sign(X0(3));
+        if P.bellyDir == 0, P.bellyDir = 1; end
+    end
 
     % 2b. Integrate the equations of motion until an event ends the phase.
     %     ode45 = adaptive Runge-Kutta solver built into core MATLAB.
@@ -104,6 +114,23 @@ for k = 1:numel(phaseList)
                 % Drone-ship mission: park the ship where the booster will fall.
                 P.xPad = predictImpact(X0, P);
                 notes{end+1} = sprintf('Drone ship positioned at %.2f km downrange', P.xPad/1e3); %#ok<AGROW>
+            end
+        case 'brake'
+            if any(ie == 2)
+                crashed = true;
+                status  = 'reached the ground before shutting down to the landing engines';
+                break
+            end
+        case 'bellyflop'
+            if any(ie == 2)                       % hit the ground before the flip
+                crashed = true;
+                status  = 'hit the ground before the flip and landing burn';
+                break
+            end
+            if isnan(P.xPad)
+                % Splashdown target: the point the ship is falling toward.
+                P.xPad = predictImpact(X0, P);
+                notes{end+1} = sprintf('Splashdown target at %.0f km downrange', P.xPad/1e3); %#ok<AGROW>
             end
     end
 end
@@ -164,9 +191,15 @@ w   = windAt(h, P);
 vRel = [vx - w; vh];               % velocity relative to the (moving) air
 vr  = norm(vRel);
 if vh >= 0, Cd = P.Cd_up; else, Cd = P.Cd_down; end
-Cd  = Cd * P.CdScale;
 q   = 0.5 * rho * vr^2;            % dynamic pressure [Pa]
-D   = q * Cd * P.A;                % drag force [N]
+% End-on drag, plus side-on drag when the body is crossways to the air
+% (CdSide = 0 for slender boosters; large for Starship's belly-flop).
+CdA = Cd * P.A;
+if P.CdSide > 0 && vr > 1e-6
+    sinAoA = abs(sin(theta) * vRel(2) - cos(theta) * vRel(1)) / vr;   % |n x vRel|/|vRel|
+    CdA    = CdA + P.CdSide * P.Aside * sinAoA;
+end
+D   = q * CdA * P.CdScale;         % drag force [N]
 if vr > 1e-6, dragDir = -vRel/vr; else, dragDir = [0; 0]; end
 
 % --- 5. GRID FINS: steer sideways toward the pad while falling -----------
@@ -248,12 +281,21 @@ switch phase
         thetaCmd = atan2(-vx, -vh);
         thrReq   = 1;
 
-    case 'landing'
+    case 'bellyflop'
+        % Engine off. Hold the body at bellyAoADeg to the oncoming air, belly
+        % (heat shield) first, nose ahead. At 90 deg it falls flat like a skydiver.
+        gamma    = atan2(vx, vh);                      % direction of travel from vertical
+        thetaCmd = gamma - P.bellyDir * deg2rad(P.bellyAoADeg);
+        thrReq   = 0;
+
+    case {'brake', 'landing'}
         % Ask the landing law for the acceleration we need, then convert it
         % into a direction and a throttle setting.
         aCmd     = landingAccel(X, P);
         thetaCmd = atan2(aCmd(1), aCmd(2));
-        thrReq   = norm(aCmd) * m / (enginesLit('landing', P) * P.T_eng);
+        thrReq   = norm(aCmd) * m / (enginesLit(phase, P) * P.T_eng);
+        if strcmp(phase, 'brake'), thrReq = 1; end   % brake hard until the landing
+                                                     % engines can take over
 
     otherwise
         error('Unknown phase "%s".', phase);
@@ -272,7 +314,8 @@ function aCmd = landingAccel(X, P)
 % HORIZONTAL: steer toward a desired sideways speed that brings us over the
 % pad, fading to "just stop sliding" in the last 50 m.
 x = X(1); h = X(2); vx = X(3); vh = X(4); m = X(5);
-hEff = max(h, P.hFloor);
+hAbove = h - P.hLand;                 % height above the touchdown/catch point
+hEff = max(hAbove, P.hFloor);
 [g, rho] = earthModel(h, P);
 
 v  = hypot(vx, vh);
@@ -287,13 +330,13 @@ tgo = max(2*hEff / max(-vh + P.v_td, P.v_td), 0.5);
 
 dxPad  = P.xPad - x;
 vxWant = sign(dxPad) * min(P.wnDivert*abs(dxPad), 2*abs(dxPad)/tgo);
-vxWant = vxWant * min(1, h/P.divertFadeAlt);
+vxWant = vxWant * min(1, max(hAbove, 0)/P.divertFadeAlt);
 tau    = min(max(tgo/3, P.divertTauMin), P.divertTauMax);
 ax     = (vxWant - vx)/tau - aDrag(1);
 
 % Limit how far we tilt; the limit shrinks to zero near the ground so
 % the booster touches down upright.
-tiltLim = P.maxTilt * min(1, h/P.tiltFadeAlt);
+tiltLim = P.maxTilt * min(1, max(hAbove, 0)/P.tiltFadeAlt);
 axLim   = ay * tan(tiltLim);
 ax      = min(max(ax, -axLim), axLim);
 
@@ -366,7 +409,7 @@ switch phase
             % (1) landing-burn ignition: thrust needed reaches ignFrac of max
             if vh < 0 && h < P.ignAlt
                 aCmd = landingAccel(X, P);
-                v1 = m*norm(aCmd) - P.ignFrac * P.engLand * P.T_eng;
+                v1 = m*norm(aCmd) - P.ignFrac * enginesLit(nextPhase, P) * P.T_eng;
             else
                 v1 = -1;
             end
@@ -379,8 +422,21 @@ switch phase
         value     = hypot(vx, vh) - P.entryEndSpeed;   % slowed down enough
         direction = -1;
 
+    case 'brake'
+        % (1) the landing engines alone can now do the job -> shut the rest down
+        % (2) reached the touchdown point
+        aCmd      = landingAccel(X, P);
+        value     = [m*norm(aCmd) - P.brakeEndFrac * P.engLand * P.T_eng;  h - P.hLand];
+        direction = [-1; -1];
+
+    case 'bellyflop'
+        % (1) down to the flip altitude -> light the engines
+        % (2) ground impact
+        value     = [h - P.flipAlt; h];
+        direction = [-1; -1];
+
     case 'landing'
-        value     = h;                                  % touchdown
+        value     = h - P.hLand;                        % touchdown (or arms reached)
         direction = -1;
 end
 isterminal = ones(size(value));
@@ -430,6 +486,7 @@ switch phase
     case 'ascent',    n = P.engAscent;
     case 'boostback', n = P.engBoost;
     case 'entry',     n = P.engEntry;
+    case 'brake',     n = P.engBrake;
     case 'landing',   n = P.engLand;
     otherwise,        n = 0;
 end

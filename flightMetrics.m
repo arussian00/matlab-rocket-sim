@@ -22,7 +22,7 @@ M.propLeft  = m(end) - mDry;
 
 %% STEP 2 - When did each phase start?
 M.phaseStart = out.phaseStart;
-iLand = find(strcmp(out.phaseList, 'landing'), 1);
+iLand = find(ismember(out.phaseList, {'brake', 'landing'}), 1);   % landing-burn start
 if ~isempty(iLand) && ~isnan(out.phaseStart(iLand))
     j = find(t >= out.phaseStart(iLand), 1);
     M.landIgnAlt   = h(j);
@@ -69,7 +69,7 @@ fprintf('Miss distance         : %9.2f m  (pad at %.2f km)\n', M.miss, P.xPad/1e
 fprintf('Propellant remaining  : %9.0f kg\n', M.propLeft);
 for k = 1:numel(out.notes), fprintf('Note: %s\n', out.notes{k}); end
 if M.success
-    fprintf('RESULT                : SUCCESSFUL LANDING\n');
+    fprintf('RESULT                : SUCCESSFUL %s\n', P.landingName);
 else
     fprintf('RESULT                : FAILED (%s)\n', out.status);
 end

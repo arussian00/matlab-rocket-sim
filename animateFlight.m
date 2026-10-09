@@ -46,6 +46,13 @@ W = 150;                                           % half-width of the view [m]
 patch(ax2, [-1e7 1e7 1e7 -1e7], [-1e3 -1e3 0 0], [0.35 0.55 0.25], 'EdgeColor', 'none');
 plot(ax2, [-15 15], [0.3 0.3], 'k', 'LineWidth', 5);                       % launch pad
 plot(ax2, P.xPad + [-15 15], [0.3 0.3], 'Color', [1 0.8 0], 'LineWidth', 5); % landing pad
+if P.hLand > 0
+    % Catch tower: the arms close around the booster near its top
+    hArms = P.hLand + 0.9*P.L;
+    xT = P.xPad + P.diam/2 + 12;
+    patch(ax2, xT + [0 8 8 0], [0 0 hArms + 20 hArms + 20], [0.3 0.3 0.33], 'EdgeColor', 'none');
+    plot(ax2, [P.xPad - P.diam/2 - 2, xT], [hArms hArms], 'Color', [0.2 0.2 0.22], 'LineWidth', 4);
+end
 hFlame  = patch(ax2, nan, nan, [1 0.55 0], 'EdgeColor', [1 0.9 0.2]);
 hRocket = patch(ax2, nan, nan, [0.93 0.93 0.96], 'EdgeColor', 'k');
 hHud = text(ax2, 0.02, 0.98, '', 'Units', 'normalized', 'FontName', 'Monospaced', ...
@@ -100,8 +107,8 @@ end
 if ~isvalid(fig), return; end
 M = flightMetrics(out, false);
 if M.success
-    hHud.String = [hHud.String newline 'TOUCHDOWN - booster landed'];
+    hHud.String = [hHud.String newline 'SUCCESSFUL ' P.landingName];
 else
-    hHud.String = [hHud.String newline 'LANDING FAILED'];
+    hHud.String = [hHud.String newline P.landingName ' FAILED'];
 end
 end
