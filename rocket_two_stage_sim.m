@@ -97,6 +97,10 @@ Pb = rocket_params('booster');
 Xb0 = [Ysep(1:4); mBoost; atan2(Ysep(3), Ysep(4)); Ysep(3)/(E.Re + Ysep(2))];
 % pitch = flight-path direction; rotation rate = following the local vertical
 outB = simulateBooster(Pb, Xb0, tSep, Pb.phaseList);
+% The booster's complete flight, starting on the launch pad: until
+% separation the booster IS the stack.
+fullB = fullFlight({pointMassSegment(tA, YA, E, @(t,Y) stackDynamics(t, Y, S, E, mu, 'stage1'))}, ...
+                   {'stack ascent'}, outB);
 
 %% STEP 7 - Print results
 fprintf('\n================ STAGE 2 / ORBIT ================\n');
@@ -105,7 +109,7 @@ fprintf('Orbit                 : %.1f x %.1f km, period %.1f min\n', perigee/1e3
 fprintf('Stage 2 prop left     : %.0f kg\n', Yseco(5) - S.m2dry - S.mPay);
 if inOrbit, fprintf('RESULT                : PAYLOAD IN ORBIT\n');
 else,       fprintf('RESULT                : ORBIT NOT REACHED\n'); end
-flightMetrics(outB);
+flightMetrics(fullB);
 
 %% STEP 8 - Plots
 % 8a. Earth view (Earth-centered coordinates, km)
@@ -150,19 +154,21 @@ yline(sqrt(mu/(E.Re + S.hOrbit)), '--', 'orbital speed');
 xlabel('Time [s]'); ylabel('Speed [m/s]'); title('Speed');
 
 % 8c. Full booster dashboard and animation
-plotFlight(outB);
+plotFlight(fullB);
 playBoosterAnimation = true;
 if playBoosterAnimation
-    animateFlight(outB, 10, 25);
+    animateFlight(fullB, 10, 25);   % from the launch pad
 end
 
 
 %% =====================================================================
 %  LOCAL FUNCTIONS
 %  =====================================================================
-function dY = stackDynamics(t, Y, S, E, mu, mode)
+function [dY, u, F, a] = stackDynamics(t, Y, S, E, mu, mode)
 % Point-mass equations of motion on a round, non-rotating Earth.
 % mode: 'stage1' (stack burning), 'stage2' (upper stage burning), 'coast'
+% Extra outputs (for plots): thrust direction u, thrust F, and the
+% acceleration you would feel, a (everything except gravity).
 x = Y(1); h = Y(2); vx = Y(3); vh = Y(4); m = Y(5); %#ok<NASGU>
 r = E.Re + h;
 g = mu / r^2;

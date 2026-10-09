@@ -17,7 +17,8 @@ P = out.P;
 
 %% STEP 1 - Resample the simulation onto evenly spaced animation frames
 [tu, iu] = unique(out.t, 'last');                % ode45 repeats phase-boundary times
-tf = [0:(speedup/fps):(tu(end) - tu(1)), tu(end) - tu(1)] + tu(1);
+tf = [tu(1) + (0:(speedup/fps):(tu(end) - tu(1))), tu(end)];
+tf = min(tf, tu(end));                           % rounding must never step past the data
 I  = @(y) interp1(tu, y(iu), tf);
 xa = I(out.X(:,1)); ha = I(out.X(:,2)); va = I(hypot(out.X(:,3), out.X(:,4)));
 ma = I(out.X(:,5)); tha = I(out.X(:,6));
@@ -45,6 +46,13 @@ W = 150;                                           % half-width of the view [m]
 patch(ax2, [-1e7 1e7 1e7 -1e7], [-1e3 -1e3 0 0], [0.35 0.55 0.25], 'EdgeColor', 'none');
 plot(ax2, [-15 15], [0.3 0.3], 'k', 'LineWidth', 5);                       % launch pad
 plot(ax2, P.xPad + [-15 15], [0.3 0.3], 'Color', [1 0.8 0], 'LineWidth', 5); % landing pad
+if P.hLand > 0
+    % Catch tower: the arms close around the booster near its top
+    hArms = P.hLand + 0.9*P.L;
+    xT = P.xPad + P.diam/2 + 12;
+    patch(ax2, xT + [0 8 8 0], [0 0 hArms + 20 hArms + 20], [0.3 0.3 0.33], 'EdgeColor', 'none');
+    plot(ax2, [P.xPad - P.diam/2 - 2, xT], [hArms hArms], 'Color', [0.2 0.2 0.22], 'LineWidth', 4);
+end
 hFlame  = patch(ax2, nan, nan, [1 0.55 0], 'EdgeColor', [1 0.9 0.2]);
 hRocket = patch(ax2, nan, nan, [0.93 0.93 0.96], 'EdgeColor', 'k');
 hHud = text(ax2, 0.02, 0.98, '', 'Units', 'normalized', 'FontName', 'Monospaced', ...
@@ -58,6 +66,7 @@ bodyY = [ 2    L*0.85 L*0.95 L L*0.95 L*0.85 2 0 0];
 
 %% STEP 3 - Draw every frame
 for k = 1:numel(tf)
+    if ~isvalid(fig), return; end                % window closed: stop quietly
     % Body axes in the world: nose direction n, sideways direction s
     n = [sin(tha(k)); cos(tha(k))];
     s = [n(2); -n(1)];
@@ -95,10 +104,11 @@ for k = 1:numel(tf)
     end
 end
 
+if ~isvalid(fig), return; end
 M = flightMetrics(out, false);
 if M.success
-    hHud.String = [hHud.String newline 'TOUCHDOWN - booster landed'];
+    hHud.String = [hHud.String newline 'SUCCESSFUL ' P.landingName];
 else
-    hHud.String = [hHud.String newline 'LANDING FAILED'];
+    hHud.String = [hHud.String newline P.landingName ' FAILED'];
 end
 end

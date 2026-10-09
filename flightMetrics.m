@@ -22,7 +22,7 @@ M.propLeft  = m(end) - mDry;
 
 %% STEP 2 - When did each phase start?
 M.phaseStart = out.phaseStart;
-iLand = find(strcmp(out.phaseList, 'landing'), 1);
+iLand = find(ismember(out.phaseList, {'brake', 'landing'}), 1);   % landing-burn start
 if ~isempty(iLand) && ~isnan(out.phaseStart(iLand))
     j = find(t >= out.phaseStart(iLand), 1);
     M.landIgnAlt   = h(j);
@@ -34,7 +34,7 @@ end
 %% STEP 3 - Touchdown state and pass/fail checks
 M.vVert   = -vh(end);                       % + = moving down
 M.vHoriz  = vx(end);
-M.tiltDeg = rad2deg(theta(end));
+M.tiltDeg = rad2deg(atan2(sin(theta(end)), cos(theta(end))));   % wrapped to +-180 deg
 M.miss    = x(end) - P.xPad;                % + = landed past the pad
 M.xLand   = x(end);
 M.tEnd    = t(end);
@@ -54,7 +54,7 @@ fprintf('Liftoff / start mass  : %9.0f kg\n', m(1));
 for k = 1:numel(out.phaseList)
     if ~isnan(out.phaseStart(k))
         j = find(t >= out.phaseStart(k), 1);
-        fprintf('  %-10s starts  : t = %6.1f s   h = %7.2f km   v = %6.0f m/s\n', ...
+        fprintf('  %-12s starts: t = %6.1f s   h = %7.2f km   v = %6.0f m/s\n', ...
                 out.phaseList{k}, t(j), h(j)/1e3, hypot(vx(j), vh(j)));
     end
 end
@@ -69,7 +69,7 @@ fprintf('Miss distance         : %9.2f m  (pad at %.2f km)\n', M.miss, P.xPad/1e
 fprintf('Propellant remaining  : %9.0f kg\n', M.propLeft);
 for k = 1:numel(out.notes), fprintf('Note: %s\n', out.notes{k}); end
 if M.success
-    fprintf('RESULT                : SUCCESSFUL LANDING\n');
+    fprintf('RESULT                : SUCCESSFUL %s\n', P.landingName);
 else
     fprintf('RESULT                : FAILED (%s)\n', out.status);
 end

@@ -6,6 +6,10 @@ function P = rocket_params(vehicle)
 %   P = rocket_params('hop')     -> same as above
 %   P = rocket_params('booster') -> first stage of the two-stage orbital
 %                                   rocket (lands on a drone ship)
+%   P = rocket_params('superheavy') -> Starship's Super Heavy booster
+%                                   (flies back and is caught by the tower)
+%   P = rocket_params('starship')   -> Starship upper stage re-entry
+%                                   (belly-flop, flip, landing burn, splashdown)
 %
 %   The returned struct P is passed to simulateBooster.m. Every field is
 %   explained below. Units are SI (m, kg, s, N) unless the name says
@@ -28,6 +32,7 @@ P.Hscale = 8500;      % density scale height: air thins by a factor e every 8.5 
 %  STEP 2 - Vehicle: mass, engines, shape
 %  ---------------------------------------------------------------------
 P.vehicleName = 'Suborbital hop';
+P.landingName = 'LANDING';   % word used in the result line (e.g. 'TOWER CATCH')
 P.m_dry    = 6000;     % empty booster mass (structure + engines) [kg]
 P.m_prop   = 19000;    % propellant loaded at liftoff [kg]
 P.T_eng    = 400e3;    % thrust of ONE engine at full throttle [N]
@@ -39,12 +44,15 @@ P.diam     = 3.5;      % body diameter [m]
 P.L        = 40;       % body length [m] (used for moment of inertia and lever arm)
 P.Cd_up    = 0.5;      % drag coefficient when climbing nose-first
 P.Cd_down  = 1.0;      % drag coefficient when falling engines-first (with drag brakes)
+P.CdSide   = 0;        % extra drag coefficient when the body is crossways to the air,
+                       % on the side area diam*L. 0 = ignore (slender boosters).
 
 % Engines lit in each powered phase (NEW: lets a 9-engine booster land on 1)
 P.engAscent = 1;
 P.engBoost  = 1;
 P.engEntry  = 1;
 P.engLand   = 1;
+P.engBrake  = 1;     % 'brake' phase (start of a two-part landing burn)
 
 %% ---------------------------------------------------------------------
 %  STEP 3 - Attitude (rotation) dynamics and control          (NEW)
@@ -67,11 +75,15 @@ P.reserve  = 2500;     % propellant that MUST remain at engine cut-off [kg]
 %  ---------------------------------------------------------------------
 P.xPad          = 0;     % landing pad position, downrange [m]. NaN = drone ship
                          % (placed automatically at the predicted impact point)
+P.hLand         = 0;     % height of the touchdown point [m]. > 0 = tower catch:
+                         % the landing burn ends at the tower arms, not the ground
 P.flipTolDeg    = 2;     % flip is "done" when attitude error < this [deg] ...
 P.flipRateTol   = 0.5;   % ... and rotation rate < this [deg/s]
 P.reserveLand   = 900;   % boostback stops early if propellant falls to this [kg]
 P.entryAlt      = 55e3;  % entry burn starts when falling through this altitude [m]
 P.entryEndSpeed = 900;   % entry burn stops once speed is below this [m/s]
+P.bellyAoADeg   = 90;    % 'bellyflop' phase: body angle to the oncoming air [deg]
+P.flipAlt       = 1000;  % 'bellyflop' phase ends (engines light, flip upright) here [m]
 
 %% ---------------------------------------------------------------------
 %  STEP 6 - Descent steering with grid fins                      (NEW)
@@ -79,6 +91,8 @@ P.entryEndSpeed = 900;   % entry burn stops once speed is below this [m/s]
 P.finAlt = 40e3;   % grid fins work below this altitude (need air) [m]
 P.finCLA = 4.0;    % fin effectiveness: max side force = q * finCLA [m^2]
 P.tauFin = 3.0;    % how quickly the fins correct sideways speed [s]
+P.finAimAlt = 3e3; % fins steer to be over the pad by this altitude [m]
+                   % (so there is no sideways drift left at landing-burn ignition)
 
 %% ---------------------------------------------------------------------
 %  STEP 7 - Landing burn guidance
@@ -94,6 +108,8 @@ P.wnDivert     = 0.3;    % sideways correction gain [1/s]
 P.divertFadeAlt= 50;     % stop chasing the pad position below this altitude [m]
 P.divertTauMin = 2.5;    % sideways-speed correction time constant, min [s]
 P.divertTauMax = 3.0;    % ... and max [s]
+P.brakeEndFrac = 0.6;    % 'brake' phase ends once the engLand engines could
+                         % give the needed thrust at 60% throttle (gentle finish)
 
 %% ---------------------------------------------------------------------
 %  STEP 8 - Success criteria at touchdown
@@ -147,15 +163,75 @@ switch lower(vehicle)
         P.engLand   = 1;          % landing burn on the center engine only
         P.xPad      = NaN;        % drone ship: placed where the booster will fall
         P.reserveLand = 2500;
+        P.finAimAlt = 0;          % still ~150 m/s sideways at ignition: the landing
+                                  % burn does the final divert, so fins aim at the ground
         P.phaseList = {'coast', 'entry', 'coast', 'landing'};
 
+    case 'superheavy'
+        % Starship's first stage (rocket_starship_sim.m). Like 'booster', it
+        % starts at stage separation; the script handles the ascent.
+        % Numbers are rounded public estimates, not official SpaceX data.
+        P.vehicleName = 'Super Heavy booster';
+        P.landingName = 'TOWER CATCH';
+        P.m_dry     = 230e3;
+        P.m_prop    = 3400e3;
+        P.T_eng     = 2.3e6;      % one Raptor at sea level
+        P.Isp_sl    = 327;
+        P.Isp_vac   = 350;
+        P.thrMin    = 0.40;
+        P.diam      = 9;
+        P.L         = 71;
+        P.tauRCS    = 30e6;       % flip torque: engines still gimballing after hot
+                                  % staging, plus thrusters (flip takes ~15 s)
+        P.gimbalMaxDeg = 15;
+        P.engAscent = 33;
+        P.engBoost  = 13;         % boostback on the inner 13 engines
+        P.engEntry  = 0;          % no entry burn
+        P.engBrake  = 13;         % landing burn lights 13 engines ...
+        P.engLand   = 3;          % ... and finishes on the 3 centre engines
+        P.finCLA    = 25;         % four big grid fins
+        P.maxTiltDeg = 30;        % it falls in at an angle: tilt the landing burn
+                                  % further to cancel the sideways speed
+        P.reserveLand = 40e3;
+        P.hLand     = 65;         % engines are ~65 m up when the arms catch it
+        P.phaseList = {'flip', 'boostback', 'coast', 'brake', 'landing'};
+        % A catch needs tighter limits than a landing on legs
+        P.success.missMax    = 3;
+        P.success.vVertMax   = 3;
+        P.success.vHorizMax  = 1.5;
+        P.success.tiltMaxDeg = 3;
+
+    case 'starship'
+        % Starship upper stage, from engine cut-off near orbit to splashdown.
+        P.vehicleName = 'Starship (ship)';
+        P.landingName = 'SPLASHDOWN';
+        P.m_dry     = 120e3;
+        P.m_prop    = 1500e3;
+        P.T_eng     = 2.3e6;      % sea-level Raptor (used for the landing burn)
+        P.Isp_sl    = 327;
+        P.Isp_vac   = 350;
+        P.thrMin    = 0.40;
+        P.diam      = 9;
+        P.L         = 50;
+        P.CdSide    = 1.2;        % flat-falling cylinder with flaps
+        P.tauRCS    = 20e6;       % the four flaps steer the belly-flop
+        P.gimbalMaxDeg = 15;
+        P.attWn     = 1.5;        % fast flip from belly-down to upright
+        P.engAscent = 6;
+        P.engLand   = 2;          % landing burn on 2 sea-level Raptors
+        P.xPad      = NaN;        % splashdown target: placed where it will fall
+        P.phaseList = {'bellyflop', 'landing'};
+        P.tPhaseMax = 8000;       % half a lap of the Earth before re-entry
+
     otherwise
-        error('rocket_params: unknown vehicle "%s" (use ''hop'' or ''booster'').', vehicle);
+        error('rocket_params: unknown vehicle "%s" (use ''hop'', ''booster'', ''superheavy'' or ''starship'').', vehicle);
 end
 
 %% Derived values (computed from the numbers above - do not edit)
 P.A         = pi*(P.diam/2)^2;          % frontal area [m^2]
+P.Aside     = P.diam * P.L;             % side (belly) area [m^2]
 P.gimbalMax = deg2rad(P.gimbalMaxDeg);  % [rad]
 P.maxTilt   = deg2rad(P.maxTiltDeg);    % [rad]
 P.bbDir     = 0;                        % boostback direction, set during the flight
+P.bellyDir  = 1;                        % belly-flop nose direction, set during the flight
 end
