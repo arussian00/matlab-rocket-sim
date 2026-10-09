@@ -1,4 +1,4 @@
-function seg = pointMassSegment(t, Y, P, dynFcn)
+function seg = pointMassSegment(t, Y, P, dynFcn, Fmax)
 %POINTMASSSEGMENT  Convert a point-mass ascent into simulateBooster's format.
 %
 %   seg = pointMassSegment(t, Y, P, dynFcn)
@@ -6,10 +6,13 @@ function seg = pointMassSegment(t, Y, P, dynFcn)
 %     P       planet values (g0, Re, rho0, Hscale) from rocket_params
 %     dynFcn  @(t, Y) returning [dY, u, F, aNG]: derivative, thrust
 %             direction, thrust [N] and felt acceleration (no gravity)
+%     Fmax    full thrust [N], to report the throttle setting (optional;
+%             without it the throttle shows 100% whenever the engines run)
 %
 %   seg has fields t, X (7 states, pitch taken along the thrust) and aux,
 %   so it can be joined to a booster flight with fullFlight.m.
 
+if nargin < 5, Fmax = []; end
 n = numel(t);
 X = [Y(:,1:5), zeros(n, 2)];
 aux = struct('throttle', zeros(n,1), 'thrust', zeros(n,1), 'gimbal', zeros(n,1), ...
@@ -19,7 +22,7 @@ for i = 1:n
     [~, u, F, aNG] = dynFcn(t(i), Y(i,:).');
     [~, rho] = earthModel(Y(i,2), P);
     if any(u), X(i,6) = atan2(u(1), u(2)); end  % body points along the thrust
-    aux.throttle(i) = double(F > 0);
+    if isempty(Fmax), aux.throttle(i) = double(F > 0); else, aux.throttle(i) = F / Fmax; end
     aux.thrust(i)   = F;
     aux.gLoad(i)    = norm(aNG) / P.g0;
     aux.q(i)        = 0.5 * rho * (Y(i,3)^2 + Y(i,4)^2);

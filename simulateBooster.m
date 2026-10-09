@@ -164,7 +164,7 @@ function [dX, aux] = boosterDynamics(t, X, P, phase)
 % --- unpack the state ---------------------------------------------------
 x = X(1); h = X(2); vx = X(3); vh = X(4); m = X(5); theta = X(6); omega = X(7);
 r = P.Re + h;                       % distance from Earth's center
-[g, rho] = earthModel(h, P);
+[g, rho, aSound] = earthModel(h, P);
 mDry = P.m_dry * P.dryScale;
 
 % --- 1. GUIDANCE: where should we point, and how hard should we push? ----
@@ -191,6 +191,7 @@ w   = windAt(h, P);
 vRel = [vx - w; vh];               % velocity relative to the (moving) air
 vr  = norm(vRel);
 if vh >= 0, Cd = P.Cd_up; else, Cd = P.Cd_down; end
+if P.machDrag, Cd = Cd * machDrag(vr / aSound); end   % sound barrier
 q   = 0.5 * rho * vr^2;            % dynamic pressure [Pa]
 % End-on drag, plus side-on drag when the body is crossways to the air
 % (CdSide = 0 for slender boosters; large for Starship's belly-flop).
@@ -201,6 +202,25 @@ if P.CdSide > 0 && vr > 1e-6
 end
 D   = q * CdA * P.CdScale;         % drag force [N]
 if vr > 1e-6, dragDir = -vRel/vr; else, dragDir = [0; 0]; end
+
+% LIFT (CLside > 0, Starship): air hitting the broad side at an angle
+% alpha pushes the body sideways, like a hand out of a car window. The
+% part of that push across the airflow is lift, L = q*CLside*Aside*sin(a)*cos(a):
+% zero when flat (90 deg), largest at 45 deg.
+aLift = [0; 0];
+if P.CLside > 0 && vr > 1e-6
+    vhat  = vRel / vr;
+    nb    = [sin(theta); cos(theta)];             % body axis (toward the nose)
+    vperp = vhat - (vhat.'*nb)*nb;                % airflow component across the body
+    sinA  = norm(vperp);
+    if sinA > 1e-6
+        Ndir = -vperp / sinA;                     % side force pushes away from the flow
+        Ldir = Ndir - (Ndir.'*vhat)*vhat;         % ... keep only the part across the flow
+        if norm(Ldir) > 1e-9, Ldir = Ldir / norm(Ldir); end
+        Lmag  = q * P.CLside * P.Aside * sinA * abs(vhat.'*nb) * P.CdScale;
+        aLift = Lmag * Ldir / m;
+    end
+end
 
 % --- 5. GRID FINS: steer sideways toward the pad while falling -----------
 Ffin = 0;
@@ -217,7 +237,7 @@ end
 aThrust = F * u / m;
 aDrag   = D * dragDir / m;
 aFin    = [Ffin / m; 0];
-aNG     = aThrust + aDrag + aFin;     % everything except gravity (what you feel)
+aNG     = aThrust + aDrag + aFin + aLift;   % everything except gravity (what you feel)
 
 % The extra terms (-vx*vh/r and +vx^2/r) appear because "horizontal" and
 % "vertical" rotate as we move around a round planet. They are tiny for the
@@ -282,10 +302,15 @@ switch phase
         thrReq   = 1;
 
     case 'bellyflop'
-        % Engine off. Hold the body at bellyAoADeg to the oncoming air, belly
-        % (heat shield) first, nose ahead. At 90 deg it falls flat like a skydiver.
+        % Engine off. Belly (heat shield) first, nose ahead and raised.
+        % Fast (hypersonic): entryAoADeg, so the body makes lift and glides.
+        % Slow: bellyAoADeg (90 = flat, falls like a skydiver).
+        % In between, the angle blends smoothly with speed.
         gamma    = atan2(vx, vh);                      % direction of travel from vertical
-        thetaCmd = gamma - P.bellyDir * deg2rad(P.bellyAoADeg);
+        v        = hypot(vx, vh);
+        f        = min(max((v - P.aoaBlendSpeed(1)) / diff(P.aoaBlendSpeed), 0), 1);
+        aoa      = (1 - f)*P.bellyAoADeg + f*P.entryAoADeg;
+        thetaCmd = gamma - P.bellyDir * deg2rad(aoa);
         thrReq   = 0;
 
     case {'brake', 'landing'}
@@ -294,8 +319,11 @@ switch phase
         aCmd     = landingAccel(X, P);
         thetaCmd = atan2(aCmd(1), aCmd(2));
         thrReq   = norm(aCmd) * m / (enginesLit(phase, P) * P.T_eng);
-        if strcmp(phase, 'brake'), thrReq = 1; end   % brake hard until the landing
-                                                     % engines can take over
+        if strcmp(phase, 'brake')
+            % Brake hard until the landing engines can take over, but keep
+            % the thrust acceleration under brakeGmax to spare the structure.
+            thrReq = burnCapacity('brake', P, m) / (enginesLit('brake', P) * P.T_eng);
+        end
 
     otherwise
         error('Unknown phase "%s".', phase);
@@ -409,7 +437,7 @@ switch phase
             % (1) landing-burn ignition: thrust needed reaches ignFrac of max
             if vh < 0 && h < P.ignAlt
                 aCmd = landingAccel(X, P);
-                v1 = m*norm(aCmd) - P.ignFrac * enginesLit(nextPhase, P) * P.T_eng;
+                v1 = m*norm(aCmd) - P.ignFrac * burnCapacity(nextPhase, P, m);
             else
                 v1 = -1;
             end
@@ -473,11 +501,19 @@ function ds = ballistic(s, m, P)
 % Unpowered point-mass equations used by predictImpact.
 h = s(2); vx = s(3); vh = s(4);
 r = P.Re + h;
-[g, rho] = earthModel(h, P);
+[g, rho, aSound] = earthModel(h, P);
 v = hypot(vx, vh);
 if vh >= 0, Cd = P.Cd_up; else, Cd = P.Cd_down; end
+if P.machDrag, Cd = Cd * machDrag(v / aSound); end
 k = 0.5*rho*v*Cd*P.A/m;
 ds = [vx*P.Re/r; vh; -k*vx - vx*vh/r; -k*vh - g + vx^2/r];
+end
+
+function F = burnCapacity(phase, P, m)
+% Most thrust the guidance may use in a powered descent phase [N]:
+% all lit engines at full throttle, capped in 'brake' by the g-limit.
+F = enginesLit(phase, P) * P.T_eng;
+if strcmp(phase, 'brake'), F = min(F, P.brakeGmax * P.g0 * m); end
 end
 
 function n = enginesLit(phase, P)

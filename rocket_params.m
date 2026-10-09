@@ -44,6 +44,10 @@ P.diam     = 3.5;      % body diameter [m]
 P.L        = 40;       % body length [m] (used for moment of inertia and lever arm)
 P.Cd_up    = 0.5;      % drag coefficient when climbing nose-first
 P.Cd_down  = 1.0;      % drag coefficient when falling engines-first (with drag brakes)
+P.machDrag = true;     % drag rises through the sound barrier (machDrag.m). false = constant Cd
+P.atmosphere = 'us76'; % 'us76' = U.S. Standard Atmosphere 1976, 'exponential' = old simple model
+P.CLside   = 0;        % side-on lift coefficient (lift = q*CLside*Aside*sin(a)*cos(a)).
+                       % 0 = no lift (slender boosters).
 P.CdSide   = 0;        % extra drag coefficient when the body is crossways to the air,
                        % on the side area diam*L. 0 = ignore (slender boosters).
 
@@ -82,7 +86,10 @@ P.flipRateTol   = 0.5;   % ... and rotation rate < this [deg/s]
 P.reserveLand   = 900;   % boostback stops early if propellant falls to this [kg]
 P.entryAlt      = 55e3;  % entry burn starts when falling through this altitude [m]
 P.entryEndSpeed = 900;   % entry burn stops once speed is below this [m/s]
-P.bellyAoADeg   = 90;    % 'bellyflop' phase: body angle to the oncoming air [deg]
+P.bellyAoADeg   = 90;    % 'bellyflop' phase: body angle to the oncoming air when slow [deg]
+P.entryAoADeg   = 90;    % ... and when fast (hypersonic). Below 90 the body makes lift.
+P.aoaBlendSpeed = [1000 2500];   % blend from bellyAoADeg to entryAoADeg between these speeds [m/s]
+P.noseRadius    = 2;     % effective nose radius for the heating estimate (heatFlux.m) [m]
 P.flipAlt       = 1000;  % 'bellyflop' phase ends (engines light, flip upright) here [m]
 
 %% ---------------------------------------------------------------------
@@ -108,6 +115,7 @@ P.wnDivert     = 0.3;    % sideways correction gain [1/s]
 P.divertFadeAlt= 50;     % stop chasing the pad position below this altitude [m]
 P.divertTauMin = 2.5;    % sideways-speed correction time constant, min [s]
 P.divertTauMax = 3.0;    % ... and max [s]
+P.brakeGmax    = Inf;    % 'brake' phase thrust acceleration limit [g] (Inf = full thrust)
 P.brakeEndFrac = 0.6;    % 'brake' phase ends once the engLand engines could
                          % give the needed thrust at 60% throttle (gentle finish)
 
@@ -188,6 +196,8 @@ switch lower(vehicle)
         P.engBoost  = 13;         % boostback on the inner 13 engines
         P.engEntry  = 0;          % no entry burn
         P.engBrake  = 13;         % landing burn lights 13 engines ...
+        P.brakeGmax = 5;          % ... throttled so the engines add at most 5 g
+                                  % (air drag adds ~5 g more at that speed)
         P.engLand   = 3;          % ... and finishes on the 3 centre engines
         P.finCLA    = 25;         % four big grid fins
         P.maxTiltDeg = 30;        % it falls in at an angle: tilt the landing burn
@@ -214,6 +224,10 @@ switch lower(vehicle)
         P.diam      = 9;
         P.L         = 50;
         P.CdSide    = 1.2;        % flat-falling cylinder with flaps
+        P.CLside    = 1.0;        % lift from the belly at an angle (L/D ~ 0.37 at 60 deg)
+        P.entryAoADeg = 60;       % hypersonic re-entry at ~60 deg angle of attack, like the
+                                  % real ship; flat (90 deg) belly-flop once below 1 km/s
+        P.noseRadius  = 4.5;      % effective radius for the heating estimate [m]
         P.tauRCS    = 20e6;       % the four flaps steer the belly-flop
         P.gimbalMaxDeg = 15;
         P.attWn     = 1.5;        % fast flip from belly-down to upright
