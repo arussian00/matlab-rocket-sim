@@ -17,7 +17,8 @@ P = out.P;
 
 %% STEP 1 - Resample the simulation onto evenly spaced animation frames
 [tu, iu] = unique(out.t, 'last');                % ode45 repeats phase-boundary times
-tf = [0:(speedup/fps):(tu(end) - tu(1)), tu(end) - tu(1)] + tu(1);
+tf = [tu(1) + (0:(speedup/fps):(tu(end) - tu(1))), tu(end)];
+tf = min(tf, tu(end));                           % rounding must never step past the data
 I  = @(y) interp1(tu, y(iu), tf);
 xa = I(out.X(:,1)); ha = I(out.X(:,2)); va = I(hypot(out.X(:,3), out.X(:,4)));
 ma = I(out.X(:,5)); tha = I(out.X(:,6));
@@ -58,6 +59,7 @@ bodyY = [ 2    L*0.85 L*0.95 L L*0.95 L*0.85 2 0 0];
 
 %% STEP 3 - Draw every frame
 for k = 1:numel(tf)
+    if ~isvalid(fig), return; end                % window closed: stop quietly
     % Body axes in the world: nose direction n, sideways direction s
     n = [sin(tha(k)); cos(tha(k))];
     s = [n(2); -n(1)];
@@ -95,6 +97,7 @@ for k = 1:numel(tf)
     end
 end
 
+if ~isvalid(fig), return; end
 M = flightMetrics(out, false);
 if M.success
     hHud.String = [hHud.String newline 'TOUCHDOWN - booster landed'];

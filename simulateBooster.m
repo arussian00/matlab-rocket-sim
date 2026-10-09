@@ -172,7 +172,9 @@ if vr > 1e-6, dragDir = -vRel/vr; else, dragDir = [0; 0]; end
 % --- 5. GRID FINS: steer sideways toward the pad while falling -----------
 Ffin = 0;
 if strcmp(phase, 'coast') && vh < 0 && h < P.finAlt && ~isnan(P.xPad)
-    tFall = max(h / max(-vh, 1), 1);           % rough time left until ground
+    % Aim to be over the pad by finAimAlt (not at ground level), so the
+    % booster has stopped sliding sideways before the landing burn starts.
+    tFall = max((h - P.finAimAlt) / max(-vh, 1), 1);   % rough time to reach finAimAlt
     vxWanted = (P.xPad - x) / tFall;           % sideways speed that reaches the pad
     FfinMax = q * P.finCLA;                    % fins can only push this hard
     Ffin = min(max(m * (vxWanted - vx) / P.tauFin, -FfinMax), FfinMax);

@@ -34,7 +34,7 @@ end
 %% STEP 3 - Touchdown state and pass/fail checks
 M.vVert   = -vh(end);                       % + = moving down
 M.vHoriz  = vx(end);
-M.tiltDeg = rad2deg(theta(end));
+M.tiltDeg = rad2deg(atan2(sin(theta(end)), cos(theta(end))));   % wrapped to +-180 deg
 M.miss    = x(end) - P.xPad;                % + = landed past the pad
 M.xLand   = x(end);
 M.tEnd    = t(end);

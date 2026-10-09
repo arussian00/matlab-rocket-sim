@@ -298,7 +298,8 @@ You can see all of this in the dashboard:
 Real boosters steer during descent with lattice fins near the top. The model:
 
 - They are active only in **coast**, while **falling**, **below 40 km** (they need air to work).
-- Desired sideways speed: `vx_wanted = (pad − x) / time_to_fall`, where `time_to_fall ≈ h / |vh|`.
+- Desired sideways speed: `vx_wanted = (pad − x) / time_to_aim`, where `time_to_aim ≈ (h − finAimAlt) / |vh|`.
+- `finAimAlt` (3 km for the hop) makes the fins put the booster over the pad *before* the landing burn, with no sideways drift left. Aiming at the ground instead (`finAimAlt = 0`) leaves it sliding at several m/s when the engine lights, and the short landing burn can't fully stop that. The orbital booster uses `finAimAlt = 0`: it still carries ~150 m/s of sideways speed at ignition, so its landing burn does the final divert.
 - Side force: `F_fin = m · (vx_wanted − vx) / tauFin`, **capped at** `q · finCLA`. More air and more speed give more authority.
 
 This cancels most of the wind drift and drag-error drift before the engine relights.
@@ -542,7 +543,7 @@ All fields are in `rocket_params.m`. These are the hop values; booster overrides
 | `reserveLand` | 900 kg [2500] | boostback safety stop |
 | `entryAlt` / `entryEndSpeed` | 55 km / 900 m/s | entry burn start and stop |
 
-**Grid fins:** `finAlt` 40 km · `finCLA` 4 m² · `tauFin` 3 s
+**Grid fins:** `finAlt` 40 km · `finCLA` 4 m² · `tauFin` 3 s · `finAimAlt` 3 km [0]
 
 **Landing**
 
@@ -578,20 +579,20 @@ These numbers come from an independent re-implementation of the same model that 
 | Engine cut-off (MECO) | t ≈ 109 s, 44 km, 1,130 m/s |
 | Flip | ≈ 35 s on thrusters |
 | Boostback | ≈ 5 s, reverses horizontal speed from +146 to about −53 m/s |
-| Apogee | ≈ 109 km (about 4 min above 100 km) |
+| Apogee | ≈ 109 km (about 87 s above 100 km) |
 | Max g-load | ≈ 4.4 g (during re-entry) |
 | Landing burn | lit at ≈ 300–450 m altitude, ≈ 136 m/s |
-| Touchdown | < 2.5 m/s down, < 1 m/s sideways, about 1–4° tilt, within a few meters of the pad |
+| Touchdown | ≈ 2 m/s down, < 0.2 m/s sideways, < 0.5° tilt, within 1 m of the pad |
 | Propellant left | ≈ 2.9 t |
 
-**Monte Carlo (20-run check):** every run landed. Worst cases were a 4 m miss, 2.2 m/s vertical, 4 m/s sideways and 1.6° tilt.
+**Monte Carlo (20-run check):** every run landed. Worst cases were a 0.5 m miss, 2.4 m/s vertical, 0.25 m/s sideways and 0.1° tilt.
 
 **Two-stage (`rocket_two_stage_sim`)**
 
 | Event | Approx. value |
 |---|---|
 | MECO | t ≈ 131 s, 60 km, ≈ 1,680 m/s, flight path 42° |
-| Orbit | ≈ 254 × 264 km, period ≈ 90 min, about 0.6 t of Stage 2 propellant spare |
+| Orbit | ≈ 251 × 256 km, period ≈ 90 min, about 0.6 t of Stage 2 propellant spare |
 | Booster entry burn | 55 → 31 km, slowed to 900 m/s |
 | Drone ship | ≈ 385 km downrange |
 | Booster touchdown | within about 1 m of the ship, about 1 m/s, ≈ 2.9 t propellant left |

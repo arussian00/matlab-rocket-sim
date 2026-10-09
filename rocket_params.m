@@ -79,6 +79,8 @@ P.entryEndSpeed = 900;   % entry burn stops once speed is below this [m/s]
 P.finAlt = 40e3;   % grid fins work below this altitude (need air) [m]
 P.finCLA = 4.0;    % fin effectiveness: max side force = q * finCLA [m^2]
 P.tauFin = 3.0;    % how quickly the fins correct sideways speed [s]
+P.finAimAlt = 3e3; % fins steer to be over the pad by this altitude [m]
+                   % (so there is no sideways drift left at landing-burn ignition)
 
 %% ---------------------------------------------------------------------
 %  STEP 7 - Landing burn guidance
@@ -147,6 +149,8 @@ switch lower(vehicle)
         P.engLand   = 1;          % landing burn on the center engine only
         P.xPad      = NaN;        % drone ship: placed where the booster will fall
         P.reserveLand = 2500;
+        P.finAimAlt = 0;          % still ~150 m/s sideways at ignition: the landing
+                                  % burn does the final divert, so fins aim at the ground
         P.phaseList = {'coast', 'entry', 'coast', 'landing'};
 
     otherwise
