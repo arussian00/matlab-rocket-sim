@@ -1,5 +1,5 @@
 function animateStarship(B, Sh, tSep, speed, fps, gifFile)
-%ANIMATESTARSHIP  Live mission view of a Starship flight, from the launch pad.
+%ANIMATESTARSHIP  Live "mission control" view of a Starship flight.
 %
 %   animateStarship(fullB, fullS, tSep)            normal speed, 20 fps
 %   animateStarship(fullB, fullS, tSep, 2)         twice as fast
@@ -9,12 +9,14 @@ function animateStarship(B, Sh, tSep, speed, fps, gifFile)
 %                  starting at liftoff (built by rocket_starship_sim.m)
 %   tSep         : hot-staging time [s]
 %
-%   Top row   : trajectory overview, Super Heavy camera, Starship camera.
-%               Both vehicles are drawn in both cameras: you see the full
-%               stack on the pad, the separation, the tower catch and the
-%               belly-flop and flip.
-%   Bottom row: altitude, speed and g-load of both vehicles. The graphs
-%               grow as the flight plays (live telemetry).
+%   ONE window, everything live at the same time (12 panels):
+%   Top row   : trajectory overview with clock and event log, Earth view,
+%               Super Heavy camera, Starship camera. Both vehicles are drawn
+%               in both cameras: the full stack on the pad, hot staging, the
+%               tower catch, the belly-flop and the flip.
+%   Rows 2-3  : altitude, speed, g-load, dynamic pressure, throttle, angle
+%               of attack, mass and heating of both vehicles. Every graph
+%               grows as the flight plays.
 %   Time runs faster during the quiet parts (shown as "time x...").
 
 if nargin < 4 || isempty(speed), speed = 1;  end
@@ -45,10 +47,15 @@ end
 tf(end+1) = tEnd;  warp(end+1) = warp(end);
 
 %% STEP 2 - Sample both vehicles at the frame times
-b = sampleFlight(B, tf);
-s = sampleFlight(Sh, tf);
+b = sampleFlight(B, tf, Pb);
+s = sampleFlight(Sh, tf, Ps);
 s.thr(tf <= tSep) = 0;                             % ship engines light at separation
 b.thr(tf > tCatch) = 0;  s.thr(tf >= Sh.t(end)) = 0;
+% Once caught, the booster's flight data stops (it is held by the tower)
+for f = {'gL', 'q', 'thr', 'aoa', 'heat'}
+    b.(f{1})(tf > tCatch + 1) = NaN;
+    s.(f{1})(tf > Sh.t(end) + 1) = NaN;
+end
 xPad = Pb.xPad;                                    % tower position
 
 % Where to draw the ship: on top of the booster until separation, then
@@ -58,41 +65,77 @@ nSep  = [sin(b.th(iSep)); cos(b.th(iSep))];
 fade  = max(0, 1 - (tf - tSep)/40);
 sx = s.x;  sh = s.h;
 for k = 1:numel(tf)
-    if tf(k) <= tSep, n = [sin(b.th(k)); cos(b.th(k))]; s.th(k) = b.th(k);
-    else,             n = nSep * fade(k);
+    if tf(k) <= tSep
+        n = [sin(b.th(k)); cos(b.th(k))];
+        s.th(k) = b.th(k);  s.aoa(k) = b.aoa(k);   % attached: same attitude
+    else
+        n = nSep * fade(k);
     end
     sx(k) = s.x(k) + Pb.L*n(1);
     sh(k) = s.h(k) + Pb.L*n(2);
 end
 
-% Mission events for the log
-ev = missionEvents(B, Sh, tSep);
+% Earth-centred coordinates for the Earth view [km]
+toX = @(x, h) (Pb.Re + h).*sin(x/Pb.Re)/1e3;
+toY = @(x, h) (Pb.Re + h).*cos(x/Pb.Re)/1e3;
+ev  = missionEvents(B, Sh, tSep);                  % for the event log
 
-%% STEP 3 - Build the figure
-fig = figure('Name', 'Starship flight test - live', 'Color', 'w', 'Position', [30 30 1400 820]);
+%% STEP 3 - Build the mission-control window (12 panels)
+fig = figure('Name', 'Starship flight test - mission control', 'Color', 'w', ...
+             'Position', [20 20 1600 900]);
+col = [0.035 0.285 0.535 0.785];  wid = 0.20;      % 4 columns
+% Top row (taller): overview, Earth view, two cameras
+axO = axes('Position', [col(1) 0.66 wid 0.29]);
+axE = axes('Position', [col(2) 0.66 wid 0.29]);
+axB = axes('Position', [col(3) 0.66 wid 0.30]);
+axS = axes('Position', [col(4) 0.66 wid 0.30]);
 
-% (a) Trajectory overview
-axO = subplot(2, 3, 1); hold(axO, 'on'); grid(axO, 'on');
+% (a) Trajectory overview, with the clock and the event log
+hold(axO, 'on'); grid(axO, 'on');
 hTrB = plot(axO, nan, nan, '-', 'Color', cB, 'LineWidth', 1.5);
 hTrS = plot(axO, nan, nan, '-', 'Color', cS, 'LineWidth', 1.5);
-hDtB = plot(axO, nan, nan, 'o', 'Color', cB, 'MarkerFaceColor', cB, 'MarkerSize', 6);
-hDtS = plot(axO, nan, nan, 'o', 'Color', cS, 'MarkerFaceColor', cS, 'MarkerSize', 6);
-plot(axO, xPad/1e3, 0, 'k^', 'MarkerFaceColor', [1 0.8 0], 'MarkerSize', 8);
+hDtB = plot(axO, nan, nan, 'o', 'Color', cB, 'MarkerFaceColor', cB, 'MarkerSize', 5);
+hDtS = plot(axO, nan, nan, 'o', 'Color', cS, 'MarkerFaceColor', cS, 'MarkerSize', 5);
+plot(axO, xPad/1e3, 0, 'k^', 'MarkerFaceColor', [1 0.8 0], 'MarkerSize', 7);
 xlabel(axO, 'Downrange [km]'); ylabel(axO, 'Altitude [km]');
-legend(axO, [hTrB hTrS], {'Super Heavy', 'Starship'}, 'Location', 'northwest', 'AutoUpdate', 'off');
+legend(axO, [hTrB hTrS], {'Super Heavy', 'Starship'}, 'Location', 'northwest', ...
+       'AutoUpdate', 'off', 'FontSize', 7);
 hClock = title(axO, '', 'FontName', 'Monospaced');
-hLog = text(axO, 0.98, 0.97, '', 'Units', 'normalized', 'FontSize', 8, ...
+hLog = text(axO, 0.98, 0.97, '', 'Units', 'normalized', 'FontSize', 7, ...
             'HorizontalAlignment', 'right', 'VerticalAlignment', 'top', 'FontName', 'Monospaced');
 
-% (b, c) Chase cameras
-W = 100;                                           % half-width of each view [m]
-axB = subplot(2, 3, 2);  gB = buildCamera(axB, Pb, Ps, xPad, 'Super Heavy camera');
-axS = subplot(2, 3, 3);  gS = buildCamera(axS, Pb, Ps, xPad, 'Starship camera');
+% (b) Earth view: the ship flies a third of the way around the planet
+hold(axE, 'on'); axis(axE, 'equal');
+th = linspace(0, 2*pi, 360);
+fill(axE, Pb.Re/1e3*cos(th), Pb.Re/1e3*sin(th), [0.75 0.85 1], 'EdgeColor', [0.3 0.5 0.8]);
+plot(axE, (Pb.Re + 100e3)/1e3*cos(th), (Pb.Re + 100e3)/1e3*sin(th), ':', 'Color', [0.5 0.5 0.5]);
+hEB = plot(axE, nan, nan, '-', 'Color', cB, 'LineWidth', 1.5);
+hES = plot(axE, nan, nan, '-', 'Color', cS, 'LineWidth', 1.5);
+hEdB = plot(axE, nan, nan, 'o', 'Color', cB, 'MarkerFaceColor', cB, 'MarkerSize', 4);
+hEdS = plot(axE, nan, nan, 'o', 'Color', cS, 'MarkerFaceColor', cS, 'MarkerSize', 4);
+R  = 1.1*Pb.Re/1e3;
+axis(axE, [-R R -R R]);
+title(axE, 'Earth view (dotted: 100 km)'); xlabel(axE, 'km'); ylabel(axE, 'km');
 
-% (d, e, f) Live telemetry
-[axH, lHB, lHS] = telemetryAxes(subplot(2, 3, 4), 'Altitude [km]', cB, cS);
-[axV, lVB, lVS] = telemetryAxes(subplot(2, 3, 5), 'Speed [km/s]', cB, cS);
-[axG, lGB, lGS] = telemetryAxes(subplot(2, 3, 6), 'g-load [g]', cB, cS);
+% (c, d) Chase cameras
+W = 100;                                           % half-width of each view [m]
+gB = buildCamera(axB, Pb, Ps, xPad, 'Super Heavy camera');
+gS = buildCamera(axS, Pb, Ps, xPad, 'Starship camera');
+
+% (e-l) Live telemetry, two rows of four
+names = {'Altitude [km]', 'Speed [km/s]', 'g-load [g]', 'Dynamic pressure [kPa]', ...
+         'Throttle [%]', 'Angle of attack [deg]', 'Mass [t] (log)', 'Heating [kW/m^2]'};
+yB = {b.h/1e3, b.v/1e3, b.gL, b.q/1e3, 100*b.thr, b.aoa, b.m/1e3, b.heat/1e3};
+yS = {sh/1e3,  s.v/1e3, s.gL, s.q/1e3, 100*s.thr, s.aoa, s.m/1e3, s.heat/1e3};
+nT = numel(names);  axT = cell(1, nT);  lB = cell(1, nT);  lS = cell(1, nT);
+for j = 1:nT
+    r = 1 + (j > 4);  c = j - 4*(r - 1);
+    axT{j} = axes('Position', [col(c) 0.36 - 0.30*(r - 1) wid 0.21]);
+    [axT{j}, lB{j}, lS{j}] = telemetryAxes(axT{j}, names{j}, cB, cS);
+end
+set(axT{7}, 'YScale', 'log');
+set(axT{6}, 'YLim', [0 180], 'YTick', 0:45:180);
+set(axT{5}, 'YLim', [0 110]);
 
 %% STEP 4 - Play
 for k = 1:numel(tf)
@@ -107,6 +150,12 @@ for k = 1:numel(tf)
     xs = [b.x(1:k), sx(1:k)]/1e3;  hs = [b.h(1:k), sh(1:k)]/1e3;
     xr = [min(xs), max(xs)];  pad = max(5, 0.05*diff(xr));
     axis(axO, [xr(1) - pad, xr(2) + pad, 0, max(10, 1.15*max(hs))]);
+
+    % Earth view
+    set(hEB, 'XData', toX(b.x(1:k), b.h(1:k)), 'YData', toY(b.x(1:k), b.h(1:k)));
+    set(hES, 'XData', toX(sx(1:k), sh(1:k)),   'YData', toY(sx(1:k), sh(1:k)));
+    set(hEdB, 'XData', toX(b.x(k), b.h(k)), 'YData', toY(b.x(k), b.h(k)));
+    set(hEdS, 'XData', toX(sx(k), sh(k)),   'YData', toY(sx(k), sh(k)));
 
     % Clock, time warp and event log
     set(hClock, 'String', sprintf('T+%02d:%02d   (time x%d)', floor(tk/60), floor(mod(tk, 60)), round(speed*warp(k))));
@@ -126,9 +175,9 @@ for k = 1:numel(tf)
         set(ax, 'Color', (1 - sky)*[0.53 0.81 0.98] + sky*[0.02 0.02 0.08]);
         axis(ax, [cx - W, cx + W, cy - W, cy + W]);
         if cam == 1
-            str = hudText('SUPER HEAVY', B.phaseList{b.ph(k)}, b, k, Pb, tk > tSep);
+            str = hudText('SUPER HEAVY', B.phaseList{b.ph(k)}, b, k, tk > tSep);
         else
-            str = hudText('STARSHIP', Sh.phaseList{s.ph(k)}, s, k, Ps, tk > tSep);
+            str = hudText('STARSHIP', Sh.phaseList{s.ph(k)}, s, k, tk > tSep);
         end
         if sky > 0.5, hc = 'w'; else, hc = 'k'; end
         set(g.hud, 'String', str, 'Color', hc);
@@ -136,11 +185,12 @@ for k = 1:numel(tf)
 
     % Live telemetry graphs
     tm = tf(1:k)/60;
-    set(lHB, 'XData', tm, 'YData', b.h(1:k)/1e3);   set(lHS, 'XData', tm, 'YData', sh(1:k)/1e3);
-    set(lVB, 'XData', tm, 'YData', b.v(1:k)/1e3);   set(lVS, 'XData', tm, 'YData', s.v(1:k)/1e3);
-    set(lGB, 'XData', tm, 'YData', b.gL(1:k));      set(lGS, 'XData', tm, 'YData', s.gL(1:k));
     xl = [0, max(1, tf(k)/60*1.05)];
-    xlim(axH, xl); xlim(axV, xl); xlim(axG, xl);
+    for j = 1:nT
+        set(lB{j}, 'XData', tm, 'YData', yB{j}(1:k));
+        set(lS{j}, 'XData', tm, 'YData', yS{j}(1:k));
+        xlim(axT{j}, xl);
+    end
 
     drawnow
     if ~isempty(gifFile)
@@ -153,9 +203,9 @@ end
 %% =====================================================================
 %  HELPERS
 %  =====================================================================
-function v = sampleFlight(out, tf)
+function v = sampleFlight(out, tf, P)
 % Interpolate one flight onto the frame times (holding the last value
-% after the vehicle has stopped).
+% after the vehicle has stopped), plus angle of attack and heating.
 [tu, iu] = unique(out.t, 'last');
 tq = min(max(tf, tu(1)), tu(end));
 I  = @(y) interp1(tu, y(iu), tq);
@@ -164,6 +214,13 @@ v.v   = I(hypot(out.X(:,3), out.X(:,4)));
 v.m   = I(out.X(:,5));  v.th = I(out.X(:,6));
 v.thr = I(out.aux.throttle);  v.gim = I(out.aux.gimbal);  v.gL = I(out.aux.gLoad);
 v.ph  = interp1(tu, out.phase(iu), tq, 'previous');
+v.q   = I(out.aux.q);
+vx = I(out.X(:,3));  vh = I(out.X(:,4));
+% angle between the nose and the direction of travel (0 = nose first,
+% 90 = flat/belly first, 180 = engines first)
+v.aoa = acosd(max(-1, min(1, (sin(v.th).*vx + cos(v.th).*vh) ./ max(v.v, 1e-6))));
+v.aoa(v.v < 1) = 0;
+v.heat = heatFlux(v.h, v.v, P.noseRadius, P);
 end
 
 function ev = missionEvents(B, Sh, tSep)
@@ -229,7 +286,7 @@ switch kind
     case 'ship'      % Starship: steel body, black heat shield, ogive nose, 4 flaps
         polys = {[-r r r 0.85*r 0.5*r 0 -0.5*r -0.85*r -r; ...
                    0 0 0.78*L 0.87*L 0.95*L L 0.95*L 0.87*L 0.78*L], steel
-                 [-r -r+1.3 -r+1.3 -r; 0 0 0.78*L 0.78*L],       dark   % heat-shield tiles (belly)
+                 [r-1.3 r r r-1.3; 0 0 0.78*L 0.78*L],           dark   % heat-shield tiles (belly, faces the air)
                  [r r+3 r+3 r; 1 1 11 14],                       dark   % aft flaps
                  [-r -r-3 -r-3 -r; 1 1 11 14],                   dark
                  [0.8*r 0.8*r+2.2 0.8*r+2.2 0.85*r; 0.80*L 0.80*L 0.87*L 0.90*L], dark  % forward flaps
@@ -263,14 +320,17 @@ function [ax, lB, lS] = telemetryAxes(ax, ylab, cB, cS)
 hold(ax, 'on'); grid(ax, 'on');
 lB = plot(ax, nan, nan, '-', 'Color', cB, 'LineWidth', 1.6);
 lS = plot(ax, nan, nan, '-', 'Color', cS, 'LineWidth', 1.6);
-xlabel(ax, 'Time [min]'); ylabel(ax, ylab); title(ax, ylab);
-legend(ax, {'Super Heavy', 'Starship'}, 'Location', 'northwest', 'AutoUpdate', 'off');
+xlabel(ax, 'Time [min]'); title(ax, ylab);
+set(ax, 'FontSize', 8);
 end
 
-function str = hudText(name, phase, v, k, P, separated)
+function str = hudText(name, phase, v, k, separated)
 if ~separated, phase = 'stack ascent (attached)'; end
+thr = v.thr(k);  aoa = v.aoa(k);
+if isnan(thr), thr = 0; end                        % after the catch / splashdown
+if isnan(aoa), aoa = 0; end
 str = sprintf(['%s\nPhase : %s\nAlt   : %8.2f km\nSpeed : %8.0f m/s\n' ...
-               'Throt : %6.0f %%\nPitch : %6.1f deg\nMass  : %8.0f t'], ...
-              name, phase, v.h(k)/1e3, v.v(k), 100*v.thr(k), ...
-              rad2deg(atan2(sin(v.th(k)), cos(v.th(k)))), v.m(k)/1e3);
+               'Throt : %6.0f %%\nPitch : %6.1f deg\nAoA   : %6.1f deg\nMass  : %8.0f t'], ...
+              name, phase, v.h(k)/1e3, v.v(k), 100*thr, ...
+              rad2deg(atan2(sin(v.th(k)), cos(v.th(k)))), aoa, v.m(k)/1e3);
 end

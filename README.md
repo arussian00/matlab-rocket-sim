@@ -92,7 +92,8 @@ rocket_hop_sim
 | `rocket_two_stage_sim.m` | script | **New.** Two-stage orbital launch; the booster lands on a drone ship. |
 | `rocket_app.m` | function | **New.** Interactive slider app (uifigure). |
 | `rocket_starship_sim.m` | script | **New.** Starship-style flight test: Super Heavy tower catch, ship belly-flop re-entry and splashdown. |
-| `animateStarship.m` | function | **New.** Live Starship mission view from the launch pad: both stages drawn in detail, two chase cameras, telemetry graphs that grow as the flight plays. |
+| `animateStarship.m` | function | **New.** Live "mission control" window for the Starship flight, from the launch pad: 12 panels updating together (overview, Earth view, two chase cameras with both stages drawn in detail, eight telemetry graphs). |
+| `heatFlux.m` | function | **New.** Re-entry heating estimate (Sutton-Graves formula). |
 | `pointMassSegment.m` | function | **New.** Converts a point-mass ascent (stack, ship burn) into the same format as `simulateBooster` results. |
 | `fullFlight.m` | function | **New.** Puts the launch in front of a booster's return, so summaries, dashboards and animations start on the launch pad. |
 
@@ -442,22 +443,28 @@ Modelled on SpaceX's Starship test flights. The numbers are rounded public estim
 - **Two-part landing burn:** it lights **13 engines** at full thrust (the new `brake` phase). Once the 3 centre engines can finish the job at 60% throttle, it shuts the other 10 down and the normal landing guidance takes over. One or three engines alone cannot stop a 300 t booster falling at over 1 km/s.
 - **Tower catch:** the landing burn ends when the booster's engines are `hLand` = 65 m above the pad, where the arms ("chopsticks") close around it. The pass limits are tighter than for a landing on legs: within 3 m of the tower centre, < 3 m/s down, < 1.5 m/s sideways, < 3° tilt.
 
-**Step 4: ship to (almost) orbit.** It uses the same altitude-hold guidance as Stage 2, at 190 km. Like the test flights, it shuts down just short of orbit, when the **perigee reaches −50 km** (below the surface). So it comes back down by itself after about half a lap of the Earth.
+**Step 4: ship to (almost) orbit.** It uses the same altitude-hold guidance as Stage 2, at 190 km. Like a real upper stage, it throttles down as it gets lighter, keeping the acceleration under 4 g (`S.gLimit`). Like the test flights, it shuts down just short of orbit, when the **perigee reaches −50 km** (below the surface). So it comes back down by itself after about half a lap of the Earth.
 
 **Step 5: belly-flop re-entry and splashdown.** It reuses `simulateBooster` with the `'starship'` preset and the phases `bellyflop > landing`:
-- **Belly-flop:** the flaps hold the ship crossways to the air (`bellyAoADeg` = 90°), heat shield first. A new **side-drag** term, `CdSide · (diam·L) · |sin(angle to the air)|`, makes the broad side catch the air. That slows the ship to under 100 m/s, like a skydiver.
+- **Lifting re-entry:** the flaps hold the ship belly-first with the nose raised. It flies at an **angle of attack of 60°** while fast (`entryAoADeg`), blending to flat (90°, `bellyAoADeg`) as it slows from 2.5 to 1 km/s (`aoaBlendSpeed`).
+  - **Drag:** a **side-drag** term, `CdSide · (diam·L) · |sin α|`, makes the broad side catch the air.
+  - **Lift:** a **lift** term, `CLside · (diam·L) · sin α · cos α`, pushes the ship upward across the airflow, like a hand held out of a car window. At 60° this gives a lift-to-drag ratio of about 0.37.
+  - **Effect:** lift makes the ship glide. It stays higher in thinner air for longer, so the peak load drops from ~7.5 g (without lift) to **~2.3 g**, close to the real ship. It also glides ~2,000 km further.
+- **Belly-flop:** once slow, it falls flat like a skydiver at under 100 m/s.
+- **Heating:** `heatFlux.m` estimates the heat reaching the heat shield, `qdot = k · √(ρ/Rn) · v³`. It grows with the *cube* of speed, so it peaks high up (~80 km), long before max-q. The estimate is about 300 kW/m² for the ship.
 - **Flip and landing burn:** at 1 km (`flipAlt`), two Raptors light, the ship swings upright in a few seconds, and the normal landing guidance brings it to a soft splashdown. The splashdown target is placed at the predicted impact point at the flip, the same way the drone ship is placed.
 
 **Step 6: the whole flight, from the launch pad.** `pointMassSegment` and `fullFlight` put the stack ascent (and, for the ship, its burn to orbit) in front of each vehicle's return. Every printout, dashboard and animation then starts at liftoff, not mid-air at stage separation.
 
-**Step 7: live mission animation (`animateStarship.m`).**
+**Step 7: live mission control (`animateStarship.m`).** One window with **12 panels that all update together**, so you can watch everything at once:
 
 | Panel | What you see |
 |---|---|
-| Trajectory (top left) | Both vehicles' paths drawn as they fly. The view zooms out as the flight grows. It also shows the mission clock, the current time-warp and a log of events (liftoff, max-Q, hot staging, boostback, catch, engine cut-off, entry, flip, splashdown). |
-| Super Heavy camera | Follows the booster. On the pad you see the full stack next to the tower. You then see hot staging (the ship's flame pushing on the booster), the flip, the boostback, the grid fins and the catch in the tower arms. |
-| Starship camera | Follows the ship: its burn, the belly-flop with the black heat shield facing the air, and the flip and landing burn before splashdown. |
-| Altitude, speed, g-load (bottom) | Live telemetry for both vehicles, drawn as the flight plays. |
+| Trajectory (top row, 1st) | Both vehicles' paths drawn as they fly. The view zooms out as the flight grows. It also shows the mission clock, the current time-warp and a log of events (liftoff, max-Q, hot staging, boostback, catch, engine cut-off, entry, flip, splashdown). |
+| Earth view (top row, 2nd) | The whole planet, with both vehicles moving around it. The ship travels about a third of the way around before splashdown. |
+| Super Heavy camera (top row, 3rd) | Follows the booster. On the pad you see the full stack next to the tower. You then see hot staging (the ship's flame pushing on the booster), the flip, the boostback, the grid fins and the catch in the tower arms. |
+| Starship camera (top row, 4th) | Follows the ship: its burn, the lifting re-entry with the black heat shield facing the air, the belly-flop, and the flip and landing burn before splashdown. |
+| 8 telemetry graphs (rows 2–3) | Altitude, speed, g-load, dynamic pressure, throttle, angle of attack, mass (log scale) and heating, for both vehicles (red = Super Heavy, blue = Starship). They are drawn as the flight plays. The booster's lines stop at the catch. |
 
 Both stages are drawn like the real ones. **Super Heavy** has a steel body, a dark vented hot-staging ring on top, grid fins near the top and an engine skirt. **Starship** has an ogive nose, two forward and two aft flaps, and a black heat-shield stripe along its belly.
 
@@ -580,7 +587,7 @@ Local functions: `starshipStack` (point-mass model: `'stack'` or `'ship'`; it al
 |---|---|
 | STEP 1 | Builds the frame times with a variable time-warp (fast during the coast, slow for staging and landings). |
 | STEP 2 | Samples both flights at those times. It keeps the ship on top of the booster until hot staging, then lets it slide onto its own path. |
-| STEP 3 | Builds the six panels (overview, two cameras, three telemetry graphs). |
+| STEP 3 | Builds the 12 panels (overview, Earth view, two cameras, eight telemetry graphs). |
 | STEP 4 | The frame loop: moves both vehicles and their flames, grows the trails and graphs, and updates the clock and event log. It stops quietly if you close the window. |
 
 Helpers: `sampleFlight`, `missionEvents`, `buildCamera` (ground, ocean, tower and arms), `vehicleShapes` (the outlines of both stages), `drawVehicle`, `telemetryAxes`, `hudText`.
@@ -652,7 +659,11 @@ All fields are in `rocket_params.m`. These are the hop values; booster overrides
 | `engBrake` | 1 | 13 | – | engines in the `brake` phase (start of the landing burn) |
 | `brakeEndFrac` | 0.6 | 0.6 | – | switch to `engLand` engines once they could manage at this throttle |
 | `CdSide` | 0 | 0 | 1.2 | side-on drag coefficient (on area `diam·L`) |
-| `bellyAoADeg` | 90° | – | 90° | belly-flop angle to the oncoming air |
+| `bellyAoADeg` | 90° | – | 90° | belly-flop angle to the oncoming air when slow |
+| `entryAoADeg` | 90° | – | 60° | ... and when fast (below 90° the body makes lift) |
+| `aoaBlendSpeed` | [1000 2500] m/s | – | same | speeds between which the angle blends |
+| `CLside` | 0 | 0 | 1.0 | side-on lift coefficient (lift = `q·CLside·diam·L·sin α·cos α`) |
+| `noseRadius` | 2 m | 2 m | 4.5 m | effective radius for the heating estimate |
 | `flipAlt` | 1 km | – | 1 km | belly-flop ends, engines light and flip upright |
 | `landingName` | `'LANDING'` | `'TOWER CATCH'` | `'SPLASHDOWN'` | word used in the result line |
 
@@ -702,11 +713,11 @@ These numbers come from an independent re-implementation of the same model that 
 | Super Heavy | flip ≈ 17 s, boostback ≈ 30 s, apogee ≈ 118 km |
 | Super Heavy landing burn | 13 engines from 10 km (≈ 1,190 m/s), down to 3 engines at ≈ 3 km (≈ 150 m/s) |
 | Tower catch | within about 0.2 m, ≈ 1.2 m/s down, ≈ 0.2 m/s sideways, ≈ 40 t propellant left |
-| Ship engine cut-off | t ≈ 473 s, 194 km, 7.71 km/s, trajectory −50 × 194 km |
-| Ship re-entry | max ≈ 7.5 g, max q ≈ 31 kPa, ≈ 90 m/s at the flip (1 km) |
-| Splashdown | t ≈ 36 min, ≈ 1.2 m/s down, within about 2 m of the target |
+| Ship engine cut-off | t ≈ 479 s, 194 km, 7.71 km/s, trajectory −50 × 194 km, max 4 g (throttled) |
+| Ship re-entry | max ≈ 2.3 g, max q ≈ 9 kPa, peak heating ≈ 310 kW/m² at ≈ 80 km, ≈ 90 m/s at the flip (1 km) |
+| Splashdown | t ≈ 42 min, ≈ 14,000 km downrange, ≈ 1.2 m/s down, within about 2 m of the target |
 
-**Starship robustness check** (the same random errors as the Monte Carlo, applied to each vehicle's return): 15 of 15 Super Heavy catches succeeded, the worst being 1.3 m off centre, 1.6 m/s down and 0.8 m/s sideways, with at least 29 t of propellant left. 6 of 6 ship splashdowns succeeded, within 3 m of the target.
+**Starship robustness check** (the same random errors as the Monte Carlo, applied to each vehicle's return): 15 of 15 Super Heavy catches succeeded, the worst being 1.3 m off centre, 1.6 m/s down and 0.8 m/s sideways, with at least 29 t of propellant left. 8 of 8 ship splashdowns (with lift) succeeded, within 2.2 m of the target, all at 2.3 g.
 
 ---
 
@@ -726,6 +737,8 @@ These numbers come from an independent re-implementation of the same model that 
 | In the two-stage script: `S.mPay = 2500` | Can it still reach orbit? |
 | In the two-stage script: `S.reserve1 = 8000` | More payload capacity, but can the booster still land? |
 | In the Starship script: `S.reserve1 = 300e3` | A faster stage separation, but Super Heavy runs out of propellant before the catch (350e3 just barely makes it). |
+| `Ps.entryAoADeg = 90;` in the Starship script (after STEP 1) | No lift: a ballistic re-entry at about 7.5 g instead of 2.3 g. |
+| `Ps.entryAoADeg = 45;` | More lift: an even gentler re-entry and a longer glide. |
 | In the Starship script: `S.perigee = 150e3` | The ship reaches a real orbit and never comes back down (the re-entry phase times out). |
 | In the Starship script: `Ps.flipAlt = 500` | A later flip; does the ship still have time to stop? |
 
@@ -738,16 +751,33 @@ These numbers come from an independent re-implementation of the same model that 
 - **Exponential atmosphere.** It isn't the full US Standard Atmosphere, and there's no Mach-dependent drag.
 - **Simplified aerodynamics:**
   - no aerodynamic torque on the body
-  - no lift except the grid-fin side force. The real Starship uses lift during re-entry to keep the g-load near 2–3 g; the model's ship enters ballistically (≈ 7.5 g).
+  - lift only from the grid fins and Starship's belly (a simple flat-plate model). It points straight "up" across the airflow: the real ship also *banks* to steer its lift sideways, which needs a 3-D model.
   - Cd changes only between "climbing" and "falling"
 - **Rigid rod.** There's no propellant slosh, no bending, and no change in the center of gravity as fuel burns. Inertia uses `m·L²/12`.
 - **Actuators are instantaneous.** The gimbal and RCS have no lag or rate limits. Engine ignition and shutdown are instant.
-- **No heating model.** Entry-burn timing is fixed by parameters, not by a heat-load limit.
+- **Simple heating estimate.** `heatFlux.m` gives the classic Sutton-Graves stagnation-point estimate for display only. It does not affect the flight, and the entry-burn timing is fixed by parameters, not by a heat-load limit.
 - **Ideal steering for the two-stage stack and Stage 2.** Point masses with no attitude dynamics; only the booster has full rotation.
 - **Drone ship placement** uses the predicted impact point after the entry burn, not a pre-launch plan. Starship's splashdown target is placed the same way, at the flip.
 - **Starship engines are simplified.** Each engine-count change (33 → 13 → 3 on the booster, the ship's 6 engines treated as one average engine) is instant. The booster's arrival is also a straight catch: the real one approaches offset from the tower and slides in.
 
 These are the natural next upgrades if you want to go further. Section 4 shows where each one would plug in.
+
+### Ideas for an even more realistic simulator
+
+Roughly from easiest to hardest:
+
+| Upgrade | Why it matters | Where it plugs in |
+|---|---|---|
+| **US Standard Atmosphere 1976** (layered temperature, real density and speed of sound) | The exponential model is off by up to ~30% at some altitudes | `earthModel.m` |
+| **Mach-dependent drag** (Cd peaks near Mach 1) | Max-q, staging and booster-return loads change noticeably | drag in `boosterDynamics` and `starshipStack` |
+| **Max-q throttle bucket** (stack throttles down to ~70% around Mach 1) | The real launch does this to protect the vehicle | `starshipStack`, `'stack'` mode |
+| **Limit the booster landing-burn g-load** (throttle the 13 engines) | The model's booster peaks at ~11 g; the real one is gentler | `brake` phase in `guidanceLaw` |
+| **Earth's rotation** (about +420 m/s eastward at Starbase's latitude) | Free speed at launch, and the ship lands in a different place | initial `vx` and the Coriolis terms |
+| **Throttle and gimbal rate limits, engine start-up delay** | Real engines take ~1–3 s to spool up | `attitudeControl`, `boosterDynamics` |
+| **Moving centre of gravity and propellant slosh** | Changes how the vehicle turns as the tanks drain | `attitudeControl` (inertia and lever arm) |
+| **Heat-shield temperature and heat load** (integrate `heatFlux`) | Shows whether the tiles survive, and lets entry timing follow heating limits | post-processing, or a new state |
+| **Bank-angle steering in 3-D** (crossrange, roll reversals) | The real ship steers its lift to hit its target, like the Space Shuttle | a 3-D state vector (big change) |
+| **Booster approach offset** (aim beside the tower, slide in at the end) | Protects the tower if something goes wrong; this is what SpaceX does | `landingAccel` target |
 
 ---
 
@@ -756,6 +786,7 @@ These are the natural next upgrades if you want to go further. Section 4 shows w
 | Problem | Fix |
 |---|---|
 | `Undefined function 'simulateBooster'` | All `.m` files must be in the **Current Folder**. Double-click the folder in the Files panel. |
+| Mission-control panels look small | Maximize the figure window, or undock it (MATLAB Online opens figures in a docked panel). Lower `speed` in STEP 9 if your browser struggles to keep up. |
 | Animation is choppy | Browser rendering is slower than desktop MATLAB. Raise `speedup` (e.g. 20), or set `playAnimation = false`. |
 | `exportgraphics` error | GIF export needs R2022a or newer. MATLAB Online is always current, so this mainly applies to older desktop versions. |
 | Monte Carlo is slow | Lower `N`, or raise `P.maxStep` to 0.5 (less accurate attitude). |

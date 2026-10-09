@@ -39,6 +39,7 @@ S.T2      = 3*2.3e6 + 3*2.5e6;   % 3 sea-level + 3 vacuum Raptors [N]
 S.Isp2    = 365;       % average of sea-level and vacuum Raptors [s]
 S.reserve2= 30e3;      % landing propellant kept in the header tanks [kg]
 S.mPay    = 10e3;      % test payload (e.g. Starlink mass simulators) [kg]
+S.gLimit  = 4;         % ship throttles down to keep acceleration below this [g]
 
 S.Cd      = 0.4;       % drag coefficient of the stack
 S.A       = Pb.A;
@@ -90,8 +91,8 @@ outS = simulateBooster(Ps, Xs0, tSECO, Ps.phaseList);
 %% STEP 7 - Stitch each vehicle's complete flight together, from the launch pad
 % Until hot staging both vehicles ARE the stack, so each history starts with
 % the stack ascent. The ship's also includes its burn to (almost) orbit.
-segA = pointMassSegment(tA, YA, Pb, @(t,Y) starshipStack(t, Y, S, Pb, mu, 'stack'));
-segC = pointMassSegment(tC, YC, Pb, @(t,Y) starshipStack(t, Y, S, Pb, mu, 'ship'));
+segA = pointMassSegment(tA, YA, Pb, @(t,Y) starshipStack(t, Y, S, Pb, mu, 'stack'), S.T1);
+segC = pointMassSegment(tC, YC, Pb, @(t,Y) starshipStack(t, Y, S, Pb, mu, 'ship'),  S.T2);
 fullB = fullFlight({segA}, {'stack ascent'}, outB);
 fullS = fullFlight({segA, segC}, {'stack ascent', 'ship burn'}, outS);
 
@@ -108,6 +109,11 @@ flightMetrics(fullS);
 Mr = flightMetrics(outS, false);            % re-entry only (after engine cut-off)
 fprintf('Ship re-entry: max %.1f g, max q %.1f kPa, %.0f m/s at the flip, splashdown %.0f km downrange\n', ...
         Mr.maxG, Mr.maxQ/1e3, Mr.landIgnSpeed, outS.X(end,1)/1e3);
+qS = heatFlux(outS.X(:,2), hypot(outS.X(:,3), outS.X(:,4)), Ps.noseRadius, Ps);
+qB = heatFlux(outB.X(:,2), hypot(outB.X(:,3), outB.X(:,4)), Pb.noseRadius, Pb);
+[qSmax, iq] = max(qS);
+fprintf('Peak heating (estimate): ship %.0f kW/m^2 at %.0f km, booster %.0f kW/m^2\n', ...
+        qSmax/1e3, outS.X(iq,2)/1e3, max(qB)/1e3);
 fprintf('Flight time to splashdown: %.1f min\n\n', outS.t(end)/60);
 
 %% STEP 9 - Live mission animation, from the launch pad
@@ -200,7 +206,7 @@ switch mode
     case 'ship'
         % PD controller drives altitude to hCoast and vertical speed to zero;
         % everything left over builds horizontal speed.
-        F   = S.T2;
+        F   = min(S.T2, S.gLimit*E.g0*m);   % throttle down as it gets lighter
         Isp = S.Isp2;
         aT  = F/m;
         aUp = S.wnG^2*(S.hCoast - h) - 2*S.zG*S.wnG*vh + g - vx^2/r;
