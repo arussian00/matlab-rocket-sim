@@ -1,7 +1,16 @@
-function ax = nexttile()
+function ax = nexttile(varargin)
 %NEXTTILE  Octave stand-in for MATLAB's nexttile (see octaveCompat.m).
 %   Places a new axes in the next cell of the grid set up by tiledlayout,
 %   filling rows left to right, top to bottom.
+%   In MATLAB this file must not run: the call is handed to MATLAB's nexttile.
+if ~exist('OCTAVE_VERSION', 'builtin')
+    if nargout == 0
+        dropOctaveShim('nexttile', varargin{:});
+    else
+        ax = dropOctaveShim('nexttile', varargin{:});
+    end
+    return
+end
 fig = gcf;
 g = getappdata(fig, 'tiledGrid');
 if isempty(g), g = [1 1 0]; end

@@ -20,7 +20,7 @@
 % Runs on MATLAB Online Basic (core MATLAB only).
 
 clear; close all; clc
-octaveCompat();          % also runs in GNU Octave (no-op in MATLAB)
+octaveCompat();          % keeps Octave shims off the MATLAB path
 
 %% STEP 1 - Parameters
 Pb = rocket_params('superheavy');  % booster return (also planet + atmosphere)
@@ -112,11 +112,27 @@ flightMetrics(fullS);
 Mr = flightMetrics(outS, false);            % re-entry only (after engine cut-off)
 fprintf('Ship re-entry: max %.1f g, max q %.1f kPa, %.0f m/s at the flip, splashdown %.0f km downrange\n', ...
         Mr.maxG, Mr.maxQ/1e3, Mr.landIgnSpeed, outS.X(end,1)/1e3);
-qS = heatFlux(outS.X(:,2), hypot(outS.X(:,3), outS.X(:,4)), Ps.noseRadius, Ps);
-qB = heatFlux(outB.X(:,2), hypot(outB.X(:,3), outB.X(:,4)), Pb.noseRadius, Pb);
-[qSmax, iq] = max(qS);
+% Heat load is the Sutton-Graves flux integrated from liftoff. The ship's
+% hex tiles get a 1-D temperature; Super Heavy is bare steel, so it gets
+% the integral only. This does not move any burn timing.
+hsS = heatShield(fullS.t, fullS.X(:,2), hypot(fullS.X(:,3), fullS.X(:,4)), Ps);
+hsB = heatShield(fullB.t, fullB.X(:,2), hypot(fullB.X(:,3), fullB.X(:,4)), Pb, false);
 fprintf('Peak heating (estimate): ship %.0f kW/m^2 at %.0f km, booster %.0f kW/m^2\n', ...
-        qSmax/1e3, outS.X(iq,2)/1e3, max(qB)/1e3);
+        hsS.qMax/1e3, fullS.X(hsS.iQmax, 2)/1e3, hsB.qMax/1e3);
+fprintf('Total heat load       : ship %.3e J/m^2 (%.1f MJ/m^2), booster %.3e J/m^2 (%.1f MJ/m^2)\n', ...
+        hsS.Qtot, hsS.Qtot/1e6, hsB.Qtot, hsB.Qtot/1e6);
+fprintf('Peak tile temperature : %.0f C at t = %.1f min (radiative equilibrium %.0f C)\n', ...
+        hsS.TsurfMaxC, hsS.tTmax/60, hsS.TradMaxC);
+fprintf('Steel under the tiles : %.0f C peak\n', hsS.TbackMaxC);
+fprintf('Radiated by splashdown: %.0f %% of the ship heat load (the rest is in the tile and the steel)\n', ...
+        100*hsS.radiatedFrac);
+if hsS.pass
+    fprintf('HEAT SHIELD           : PASS — margin %.0f C under the %.0f C tile limit\n', ...
+            hsS.marginC, hsS.limitC);
+else
+    fprintf('HEAT SHIELD           : FAIL — peak is %.0f C over the %.0f C tile limit\n', ...
+            -hsS.marginC, hsS.limitC);
+end
 fprintf('Flight time to splashdown: %.1f min\n\n', outS.t(end)/60);
 
 %% STEP 9 - Live mission animation, from the launch pad
@@ -177,3 +193,6 @@ xlabel('Time [min]'); ylabel('Speed [m/s]'); title('Speed');
 % 10c. Full 9-panel dashboards, liftoff to touchdown
 plotFlight(fullB);
 plotFlight(fullS);
+
+% 10d. Heat flux, heat load and tile temperature
+plotHeatShield(fullS, fullB, hsS, hsB);

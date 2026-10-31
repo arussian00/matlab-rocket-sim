@@ -12,6 +12,7 @@ if exist('OCTAVE_VERSION', 'builtin')
     error(['rocket_app needs MATLAB: Octave has no uifigure/uislider. ' ...
            'In Octave, edit the values at the top of rocket_hop_sim.m instead.']);
 end
+octaveCompat();          % keeps Octave shims off the MATLAB path
 
 %% STEP 1 - Window and layout
 fig  = uifigure('Name', 'Rocket Hop Simulator', 'Position', [60 60 1250 720]);

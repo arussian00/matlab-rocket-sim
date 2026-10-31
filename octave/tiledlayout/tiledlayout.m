@@ -3,6 +3,15 @@ function tl = tiledlayout(r, c, varargin)
 %   Remembers the grid size for nexttile, and returns an invisible strip
 %   across the top of the figure so that title(tl, ...) still works.
 %   Spacing options are ignored.
+%   In MATLAB this file must not run: the call is handed to MATLAB's tiledlayout.
+if ~exist('OCTAVE_VERSION', 'builtin')
+    if nargout == 0
+        dropOctaveShim('tiledlayout', r, c, varargin{:});
+    else
+        tl = dropOctaveShim('tiledlayout', r, c, varargin{:});
+    end
+    return
+end
 fig = gcf;
 setappdata(fig, 'tiledGrid', [r c 0]);
 % (Octave hides the title of an invisible axes, so keep it "visible" but bare)

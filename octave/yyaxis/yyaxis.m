@@ -4,6 +4,11 @@ function yyaxis(varargin)
 %   side is a transparent second axes laid over the first, with its y-axis
 %   on the right and its x-axis linked to the left one. Whichever side you
 %   pick becomes the current axes, so plot, ylabel, ylim ... act on it.
+%   In MATLAB this file must not run: the call is handed to MATLAB's yyaxis.
+if ~exist('OCTAVE_VERSION', 'builtin')
+    dropOctaveShim('yyaxis', varargin{:});
+    return
+end
 if numel(varargin) == 2, ax = varargin{1}; side = varargin{2};
 else,                    ax = gca;         side = varargin{1};
 end

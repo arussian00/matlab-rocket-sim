@@ -11,13 +11,12 @@ A pick-up list for the next session. Each row is a self-contained addition: pick
 | 1 | **Earth's rotation** | 🟢 | About 420 m/s of free eastward speed at Starbase's latitude. The ship would splash down somewhere else, and the booster's catch would need retuning. | Starting `vx` in the scripts, plus the Coriolis and centrifugal terms in `boosterDynamics` and `starshipStack` | "Add Earth's rotation to all missions" |
 | 2 | **Booster entry burn or lofted return** | 🟡 | The only way to make Super Heavy's descent really gentle: it hits 10 km at ~1,170 m/s and ~10 g. Try a short entry burn, or a lower boostback trajectory. | A new phase before `brake` in `simulateBooster.m` | "Make Super Heavy arrive slower so its landing is gentler" |
 | 3 | **Engine spool-up time and gimbal rate limits** | 🟡 | Real Raptors take 1–3 s to reach full thrust, and the nozzle can only swivel so fast. Landings get harder and more realistic. | Two new states (actual throttle, actual gimbal) in `boosterDynamics` and `attitudeControl` | "Add engine spool-up and gimbal rate limits" |
-| 4 | **Heat-shield temperature and total heat load** | 🟢 | `heatFlux.m` gives heating *rate* only. Adding it up over the flight shows whether the tiles would survive, and could set the entry-burn timing. | Post-processing in `rocket_starship_sim.m`, plus a panel in `animateStarship.m` | "Add heat-shield temperature and total heat load" |
-| 5 | **Booster approach from beside the tower** | 🟡 | SpaceX aims the booster *next to* the tower and slides it in at the last moment, so a failure doesn't hit the tower. | The target position in `landingAccel` | "Make Super Heavy approach offset from the tower and slide in" |
-| 6 | **Moving centre of gravity and propellant slosh** | 🟡 | As the tanks drain, the rocket's balance point moves and it turns differently. Slosh can upset a landing. | Inertia and lever arm in `attitudeControl` | "Add a moving centre of gravity and propellant slosh" |
-| 7 | **Wind and weather profiles** | 🟢 | Wind is now one simple bump at 10 km. Real launch days have jet streams and gusts at many altitudes. | `windAt` in `simulateBooster.m`; random profiles in `rocket_monte_carlo.m` | "Add realistic wind profiles and gusts" |
-| 8 | **Ship tower catch** (instead of a splashdown) | 🟡 | SpaceX's plan is to catch the ship as well. The `hLand` machinery already exists, but it needs a target planned before launch, not placed at the flip. | `'starship'` preset in `rocket_params.m`; guidance during the belly-flop | "Catch Starship on a tower instead of splashing down" |
-| 9 | **3-D flight with bank-angle steering** | 🔴 | The real ship steers its lift sideways by banking (like the Space Shuttle) to hit a target. It needs a full 3-D model. | New state vector everywhere (a big rewrite) | "Plan a 3-D version of the simulator" |
-| 10 | **Real orbit to a target and a deorbit burn** | 🟡 | Today the ship stops just short of orbit. A real mission would reach orbit, coast, then fire a deorbit burn at a chosen time to land at a chosen place. | `rocket_starship_sim.m` (new phases) | "Put the ship in orbit and add a deorbit burn" |
+| 4 | **Booster approach from beside the tower** | 🟡 | SpaceX aims the booster *next to* the tower and slides it in at the last moment, so a failure doesn't hit the tower. | The target position in `landingAccel` | "Make Super Heavy approach offset from the tower and slide in" |
+| 5 | **Moving centre of gravity and propellant slosh** | 🟡 | As the tanks drain, the rocket's balance point moves and it turns differently. Slosh can upset a landing. | Inertia and lever arm in `attitudeControl` | "Add a moving centre of gravity and propellant slosh" |
+| 6 | **Wind and weather profiles** | 🟢 | Wind is now one simple bump at 10 km. Real launch days have jet streams and gusts at many altitudes. | `windAt` in `simulateBooster.m`; random profiles in `rocket_monte_carlo.m` | "Add realistic wind profiles and gusts" |
+| 7 | **Ship tower catch** (instead of a splashdown) | 🟡 | SpaceX's plan is to catch the ship as well. The `hLand` machinery already exists, but it needs a target planned before launch, not placed at the flip. | `'starship'` preset in `rocket_params.m`; guidance during the belly-flop | "Catch Starship on a tower instead of splashing down" |
+| 8 | **3-D flight with bank-angle steering** | 🔴 | The real ship steers its lift sideways by banking (like the Space Shuttle) to hit a target. It needs a full 3-D model. | New state vector everywhere (a big rewrite) | "Plan a 3-D version of the simulator" |
+| 9 | **Real orbit to a target and a deorbit burn** | 🟡 | Today the ship stops just short of orbit. A real mission would reach orbit, coast, then fire a deorbit burn at a chosen time to land at a chosen place. | `rocket_starship_sim.m` (new phases) | "Put the ship in orbit and add a deorbit burn" |
 
 ## 2. Fun features
 
@@ -33,7 +32,7 @@ A pick-up list for the next session. Each row is a self-contained addition: pick
 
 | # | Item | Effort | Why | Ask |
 |---|---|---|---|---|
-| 16 | **Run everything in real MATLAB** | 🟢 | The project now runs fully in GNU Octave, and that's where it has been tested. The changes for Octave were written to work in MATLAB too, but haven't been run there. Run the five scripts below in MATLAB and report any red errors. | "Here are the MATLAB errors I got: ..." |
+| 16 | **Confirm the five scripts in MATLAB Online** | 🟢 | MATLAB is the primary environment. Octave is optional and best-effort, and its stand-ins must stay off MATLAB's path (`octaveCompat`, `dropOctaveShim`). The heat-shield code uses `arguments` blocks, so it needs MATLAB R2019b or newer (MATLAB Online qualifies). A pass of the five scripts below in MATLAB Online is the confirmation this repository cannot run itself. | "Here are the MATLAB errors I got: ..." |
 | 17 | **Automatic tests on GitHub** | 🟡 | A GitHub Action that runs every mission on each pull request (with Octave, which is free) and fails if a landing stops working. It catches mistakes before you merge. | "Set up automatic tests for this repo" |
 | 18 | **Speed up the simulations** | 🟡 | The Starship script takes ~30–50 s. Caching the atmosphere and loosening solver tolerances where safe could halve it, and make a Starship Monte Carlo practical. | "Make the simulations run faster" |
 | 19 | **Tidy the two-stage script** | 🟢 | `rocket_two_stage_sim` and `rocket_starship_sim` share a lot of point-mass code that could move into one shared function. | "Clean up the duplicated ascent code" |
@@ -50,11 +49,12 @@ The scripts to check in MATLAB (item 16): `rocket_hop_sim`, `rocket_monte_carlo`
 | Two-stage drawing (Super Heavy + Starship) and live 12-panel mission control | `animateStarship.m` |
 | Lifting re-entry (60° angle of attack, ~2.5 g instead of 7.5 g) | `CLside`, `entryAoADeg` |
 | Re-entry heating estimate | `heatFlux.m` |
+| Heat-shield temperature, total heat load, and a pass/margin check against 1,500 °C | `heatShield.m`, `plotHeatShield.m`, heating panel in `animateStarship.m` |
 | U.S. Standard Atmosphere 1976 | `earthModel.m` |
 | Mach-dependent drag | `machDrag.m` |
 | Max-q throttle bucket and 4 g ship limit | `S.thrBucket`, `S.gLimit` |
 | g-limited booster landing burn | `brakeGmax` |
-| Runs in GNU Octave (free, no time limit) as well as MATLAB | `octaveCompat.m`, `octave/` |
+| Optional GNU Octave path. In MATLAB the stand-ins are kept off the path so they cannot replace MATLAB functions | `octaveCompat.m`, `dropOctaveShim.m`, `octave/` |
 
 ## Where things stand
 
@@ -62,4 +62,4 @@ The scripts to check in MATLAB (item 16): `rocket_hop_sim`, `rocket_monte_carlo`
 |---|---|
 | Hop | lands 0.08 m from the pad; Monte Carlo 20/20 |
 | Two-stage | reaches orbit; booster lands 1.1 m from the drone ship |
-| Starship | booster caught 0.08 m from tower centre (8/8 with random errors); ship splashes down 1.5 m from target at T+44 min (6/6 with random errors) |
+| Starship | booster caught 0.08 m from tower centre (8/8 with random errors); ship splashes down 1.5 m from target at T+44 min (6/6 with random errors). Heat shield: peak 1,330 °C, margin 170 °C under 1,500 °C, heat load 158 MJ/m² |

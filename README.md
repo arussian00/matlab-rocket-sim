@@ -10,7 +10,7 @@ On top of that there is a **Monte Carlo** study (many flights with random errors
 
 **What to add next:** see [ROADMAP.md](ROADMAP.md), a pick-up list of upgrades with effort levels.
 
-Everything runs on **MATLAB Online Basic** (the free tier) and on **GNU Octave** (free, no time limit; see [Running in GNU Octave](#running-in-gnu-octave-free-no-time-limit)). It uses core MATLAB only: no Simulink and no toolboxes.
+**MATLAB is the environment this project is written for** — MATLAB Online (the free Basic tier is enough) or desktop MATLAB. It uses core MATLAB only: no Simulink and no toolboxes. GNU Octave is an optional, best-effort extra (see [Running in GNU Octave](#running-in-gnu-octave-optional)). New code uses current MATLAB (R2019b and later, which MATLAB Online always is), including `arguments` blocks.
 
 ---
 
@@ -77,27 +77,21 @@ rocket_hop_sim
 | `rocket_starship_sim` | Starship flight test from the launch pad: hot staging, booster tower catch, ship belly-flop and splashdown, with a live two-camera animation | ~30 s, then ~2 min of animation |
 | `rocket_app` | Window with sliders. Change values and press **LAUNCH** (MATLAB only) | instant per run |
 
-### Running in GNU Octave (free, no time limit)
+### Running in GNU Octave (optional)
 
-The whole project also runs in [GNU Octave](https://octave.org), a free MATLAB-compatible program you install on your own computer.
+MATLAB is the supported way to run this project. [GNU Octave](https://octave.org) can still run most of the older missions, as a best-effort extra. It is not the target, and where the two disagree, the MATLAB behaviour is the one that counts.
 
-**On a Mac:**
-1. Install Homebrew from [brew.sh](https://brew.sh) if you don't have it.
-2. In Terminal, run:
-   ```bash
-   brew install octave
-   git clone https://github.com/arussian00/matlab-rocket-sim.git
-   octave --gui
-   ```
-3. In Octave's Command Window, run `cd ~/matlab-rocket-sim`, then any of the commands in the table above.
+**On a Mac:** install [Homebrew](https://brew.sh), then `brew install octave`, clone the repository, and in Octave's Command Window `cd` into it and run `rocket_hop_sim`.
 
-**What's different from MATLAB:**
-- **The plots look the same,** apart from small styling details. Octave lacks a few newer MATLAB plotting commands (`tiledlayout`, `nexttile`, `yline`, `xline`, `yyaxis`, `histogram`), so `octaveCompat.m` adds stand-ins from the `octave/` folder. It does this automatically when you run any script. In MATLAB it does nothing.
-- **`rocket_app` (the slider app) needs MATLAB.** Octave has no `uifigure`. In Octave, change the values at the top of `rocket_hop_sim.m` instead.
+What to expect:
+- Octave is missing some newer plotting commands (`tiledlayout`, `nexttile`, `yline`, `xline`, `yyaxis`, `histogram`, `exportgraphics`). `octaveCompat.m` adds stand-ins from `octave/` **only when it is actually running in Octave**.
+- In MATLAB, `octaveCompat` does the opposite: if those folders are on the path, it takes them off, so MATLAB's own functions stay in charge. `dropOctaveShim.m` does the same for a single call, if a stand-in is invoked anyway.
+- **`rocket_app` needs MATLAB** (`uifigure`). In Octave, edit the values at the top of `rocket_hop_sim.m`.
 - **Saving a GIF needs MATLAB.** In Octave the animations still play; the GIF step is skipped with a warning.
-- **Octave is slower**, roughly 2–4× for the simulations. The Starship script takes about a minute before its animation starts, and the 50-flight Monte Carlo about 8 minutes (lower `N` for a quicker look).
+- **`heatShield.m` and `plotHeatShield.m` use an `arguments` block** (MATLAB R2019b+). Octave 8 warns that it does not support those blocks, skips the input checks, and runs the rest. Treat that as unsupported: the checks, and the project as a whole, are maintained for MATLAB.
+- Octave is slower, roughly 2–4×. Property names such as `axes.Color` are used in the hop animation because that is normal MATLAB; Octave's graphics handles do not accept that syntax.
 
-**Don't add the `octave/` folder to MATLAB's path.** Its stand-ins would replace MATLAB's own plotting commands. `octaveCompat` only ever adds them in Octave.
+**Do not add the `octave/` folder, or any folder under it, to MATLAB's path** (that includes `addpath(genpath(pwd))`). Those files use the same names as MATLAB functions. `octaveCompat` removes them again when a script starts, and each stand-in refuses to stay in front of the real function, but the clean setup is to leave them off the path.
 
 ---
 
@@ -116,8 +110,10 @@ The whole project also runs in [GNU Octave](https://octave.org), a free MATLAB-c
 | `rocket_two_stage_sim.m` | script | **New.** Two-stage orbital launch; the booster lands on a drone ship. |
 | `rocket_app.m` | function | **New.** Interactive slider app (uifigure). |
 | `rocket_starship_sim.m` | script | **New.** Starship-style flight test: Super Heavy tower catch, ship belly-flop re-entry and splashdown. |
-| `animateStarship.m` | function | **New.** Live "mission control" window for the Starship flight, from the launch pad: 12 panels updating together (overview, Earth view, two chase cameras with both stages drawn in detail, eight telemetry graphs). |
-| `heatFlux.m` | function | **New.** Re-entry heating estimate (Sutton-Graves formula). |
+| `animateStarship.m` | function | **New.** Live "mission control" window for the Starship flight, from the launch pad: 12 panels updating together (overview, Earth view, two chase cameras with both stages drawn in detail, eight telemetry graphs). The heating graph also shows tile temperature and heat load. |
+| `heatFlux.m` | function | **New.** Re-entry heating rate (Sutton-Graves formula), in W/m². |
+| `heatShield.m` | function | **New.** Integrates that rate into a heat load (J/m²) and a 1-D tile temperature, and checks it against the tile limit. |
+| `plotHeatShield.m` | function | **New.** Three-panel figure: heat flux, heat load, tile and steel temperature. |
 | `machDrag.m` | function | **New.** Drag multiplier versus Mach number (the sound barrier). |
 | `pointMassSegment.m` | function | **New.** Converts a point-mass ascent (stack, ship burn) into the same format as `simulateBooster` results. |
 | `fullFlight.m` | function | **New.** Puts the launch in front of a booster's return, so summaries, dashboards and animations start on the launch pad. |
@@ -125,7 +121,7 @@ The whole project also runs in [GNU Octave](https://octave.org), a free MATLAB-c
 | `stackDynamics.m`, `circularSECO.m` | functions | Two-stage ascent model and Stage 2 cut-off event (used by `rocket_two_stage_sim`). |
 | `evMECO.m` | function | Booster cut-off event, shared by both orbital scripts. |
 | `phaseColors.m` | function | One colour per flight phase (like MATLAB's `lines`, but the same in Octave). |
-| `octaveCompat.m` + `octave/` | function + folder | Makes everything run in GNU Octave (see the Quick start). Does nothing in MATLAB. |
+| `octaveCompat.m`, `dropOctaveShim.m`, `octave/` | function + folder | Optional Octave stand-ins. In MATLAB they stay off the path and hand any accidental call back to MATLAB's own function. |
 
 How they connect:
 
@@ -269,6 +265,59 @@ dω/dt = τ / I                    torque / inertia
 ```
 
 Torque `τ` comes from the engine gimbal and the RCS thrusters (section 6.3).
+
+### 4.8 Heat shield: heat load and tile temperature (`heatShield.m`)
+
+`heatFlux.m` is the heating **rate**, the Sutton-Graves estimate
+
+```
+q = k · √(ρ / Rn) · v³          [W/m²]
+```
+
+with `k = 1.7415×10⁻⁴` for Earth. `Rn` is an effective windward radius (4.5 m on the ship, 2 m on Super Heavy). Heating grows with the cube of speed, so it peaks high up, while the vehicle is still fast.
+
+The **heat load** is that rate added up over the whole flight, from liftoff:
+
+```
+Q(t) = ∫ q dt                   [J/m²]
+```
+
+Most of it arrives during the ship's re-entry. Super Heavy gets the same integral and no tile model: it is bare steel.
+
+The ship's hexagonal tiles are a 1-D slab. Heat conducts through the thickness, the outer face radiates, and the stainless barrel is a lumped mass on the inner face (adiabatic on the cabin side):
+
+```
+ρ cp ∂T/∂t = ∂/∂x (k ∂T/∂x)
+outer face:  q − ε σ (T⁴ − Tenv⁴) = −k ∂T/∂x
+inner face:  the steel's heat capacity, no further loss
+```
+
+`q` is the cold-wall Sutton-Graves flux, so it does not drop as the wall heats up. The surface temperature from this model is a little high, which is the conservative side of a limit check. The step is backward Euler, with radiation linearised so a hot surface stays stable.
+
+**Radiative equilibrium** is the temperature the surface would have with no thermal mass and no conduction inward:
+
+```
+ε σ (Trad⁴ − Tenv⁴) = q
+```
+
+On this long, lifting entry the outer surface sits close to `Trad`. The 1-D model is what says how much of the load reaches the steel.
+
+The numbers are open estimates, chosen so the model can be checked against a published temperature band:
+
+| Property | Value | Why this value |
+|---|---|---|
+| Thickness | 25 mm | About an inch, the depth visible at the edge of a Starship tile in public photos |
+| Density | 320 kg/m³ | Toughened silica in the Shuttle LI-2200 class (the lightest Shuttle tiles, LI-900, are 144 kg/m³ and too fragile for a ship that flies often) |
+| Specific heat | 1000 J/(kg·K) | Typical of a silica ceramic once it is hot |
+| Conductivity | 0.10 W/(m·K) | One effective value for a hot silica tile, including radiation across the pores |
+| Emissivity | 0.85 | Black coating, the same range as the Shuttle's reaction-cured glass |
+| Sink temperature | 250 K | A round figure for Earth infrared. Sunlight and albedo are left out |
+| Steel skin | 4 mm, 304L | The barrel the tiles are pinned to. ρ = 7930 kg/m³, cp = 500 J/(kg·K) |
+| Liftoff temperature | 20 °C | Uniform through the tile and the skin |
+
+**Tile limit: 1,500 °C.** Public descriptions of Starship's hex tiles put the useful band at about 1,400–1,600 °C. That is hotter than the Shuttle's reusable black tiles, which were certified near 1,260 °C, and in the range later toughened ceramics are discussed up to (about 1,650 °C for a short exposure). This check uses **1,500 °C**, the middle of the 1,400–1,600 °C band, as the reuse line. A peak inside the band but above 1,500 °C still fails. The margin printed with the mission is `1,500 °C − peak surface temperature`.
+
+The heat load is reported only. It does not move a burn: the ship has no entry burn, and Super Heavy's return is tuned for the tower catch.
 
 ---
 
@@ -498,7 +547,7 @@ Modelled on SpaceX's Starship test flights. The numbers are rounded public estim
   - **Lift:** a **lift** term, `CLside · (diam·L) · sin α · cos α`, pushes the ship upward across the airflow, like a hand held out of a car window. At 60° this gives a lift-to-drag ratio of about 0.37.
   - **Effect:** lift makes the ship glide. It stays higher in thinner air for longer, so the peak load drops from ~7.5 g (without lift) to **~2.3 g**, close to the real ship. It also glides ~2,000 km further.
 - **Belly-flop:** once slow, it falls flat like a skydiver at under 100 m/s.
-- **Heating:** `heatFlux.m` estimates the heat reaching the heat shield, `qdot = k · √(ρ/Rn) · v³`. It grows with the *cube* of speed, so it peaks high up (~80 km), long before max-q. The estimate is about 300 kW/m² for the ship.
+- **Heating and the heat shield:** `heatFlux.m` is the windward heating rate, `q = k · √(ρ/Rn) · v³`. It grows with the *cube* of speed, so it peaks high up, long before max-q. `heatShield.m` integrates that rate from liftoff into a heat load in J/m², and runs a 1-D model of the ship's tiles (section 4.8): conduction through a 25 mm silica tile, radiation from the outer face, and the 4 mm steel barrel on the back. It also stores the radiative-equilibrium temperature, which the surface tracks closely on this long entry. The mission printout gives the peak flux, the total heat load, the peak tile temperature, the steel temperature, and a **PASS/FAIL** against the **1,500 °C** reuse limit with the margin in °C. Super Heavy's heat load is printed too; it has no tiles. The load does not change any burn time.
 - **Flip and landing burn:** at 1 km (`flipAlt`), two Raptors light, the ship swings upright in a few seconds, and the normal landing guidance brings it to a soft splashdown. The splashdown target is placed at the predicted impact point at the flip, the same way the drone ship is placed.
 
 **Step 6: the whole flight, from the launch pad.** `pointMassSegment` and `fullFlight` put the stack ascent (and, for the ship, its burn to orbit) in front of each vehicle's return. Every printout, dashboard and animation then starts at liftoff, not mid-air at stage separation.
@@ -511,7 +560,7 @@ Modelled on SpaceX's Starship test flights. The numbers are rounded public estim
 | Earth view (top row, 2nd) | The whole planet, with both vehicles moving around it. The ship travels about a third of the way around before splashdown. |
 | Super Heavy camera (top row, 3rd) | Follows the booster. On the pad you see the full stack next to the tower. You then see hot staging (the ship's flame pushing on the booster), the flip, the boostback, the grid fins and the catch in the tower arms. |
 | Starship camera (top row, 4th) | Follows the ship: its burn, the lifting re-entry with the black heat shield facing the air, the belly-flop, and the flip and landing burn before splashdown. |
-| 8 telemetry graphs (rows 2–3) | Altitude, speed, g-load, dynamic pressure, throttle, angle of attack, mass (log scale) and heating, for both vehicles (red = Super Heavy, blue = Starship). They are drawn as the flight plays. The booster's lines stop at the catch. |
+| 8 telemetry graphs (rows 2–3) | Altitude, speed, g-load, dynamic pressure, throttle, angle of attack, mass (log scale) and heating, for both vehicles (red = Super Heavy, blue = Starship). The heating panel uses a second axis for the ship's tile temperature, with the 1,500 °C limit drawn on it, and writes the current temperature and heat load in the corner. The belly stripe on the ship turns from black toward orange as the tiles heat up. The Starship camera's readout adds tile temperature and heat load. Graphs are drawn as the flight plays. The booster's lines stop at the catch. |
 
 Both stages are drawn like the real ones. **Super Heavy** has a steel body, a dark vented hot-staging ring on top, grid fins near the top and an engine skirt. **Starship** has an ogive nose, two forward and two aft flaps, and a black heat-shield stripe along its belly.
 
@@ -622,11 +671,11 @@ Helper functions (each in its own file, so the script also runs in Octave): `sta
 | 5 | Super Heavy return and tower catch via `simulateBooster` |
 | 6 | Ship belly-flop re-entry and splashdown via `simulateBooster` |
 | 7 | Join the launch onto each vehicle's return (`pointMassSegment`, `fullFlight`), so everything starts on the pad |
-| 8 | Printout (liftoff to catch, liftoff to splashdown) |
-| 9 | Live mission animation (`animateStarship`) |
-| 10 | Summary plots: Earth view, flat view, time histories and both 9-panel dashboards |
+| 8 | Printout (liftoff to catch, liftoff to splashdown), then heat load, peak tile temperature and the pass/margin line |
+| 9 | Live mission animation (`animateStarship`), including the tile-temperature axis |
+| 10 | Summary plots: Earth view, flat view, time histories, both 9-panel dashboards, and the heat-shield figure (`plotHeatShield`) |
 
-Helper functions (each in its own file, so the script also runs in Octave): `starshipStack.m` (point-mass model: `'stack'` or `'ship'`; it also returns the thrust direction for drawing), `evMECO.m`, `perigeeSECO.m`, `orbitOf.m` (perigee and apogee from a state).
+Helper functions, each in its own file: `starshipStack.m` (point-mass model: `'stack'` or `'ship'`; it also returns the thrust direction for drawing), `evMECO.m`, `perigeeSECO.m`, `orbitOf.m` (perigee and apogee from a state), `heatShield.m` (heat load and tile temperature), `plotHeatShield.m`.
 
 ### `animateStarship.m`
 
@@ -635,7 +684,7 @@ Helper functions (each in its own file, so the script also runs in Octave): `sta
 | STEP 1 | Builds the frame times with a variable time-warp (fast during the coast, slow for staging and landings). |
 | STEP 2 | Samples both flights at those times. It keeps the ship on top of the booster until hot staging, then lets it slide onto its own path. |
 | STEP 3 | Builds the 12 panels (overview, Earth view, two cameras, eight telemetry graphs). |
-| STEP 4 | The frame loop: moves both vehicles and their flames, grows the trails and graphs, and updates the clock and event log. It stops quietly if you close the window. |
+| STEP 4 | The frame loop: moves both vehicles and their flames, grows the trails and graphs, and updates the clock and event log. The heating panel's right axis follows the tile temperature, and the belly stripe warms in colour. It stops quietly if you close the window. |
 
 Helpers: `sampleFlight`, `missionEvents`, `buildCamera` (ground, ocean, tower and arms), `vehicleShapes` (the outlines of both stages), `drawVehicle`, `telemetryAxes`, `hudText`.
 
@@ -711,7 +760,14 @@ All fields are in `rocket_params.m`. These are the hop values; booster overrides
 | `entryAoADeg` | 90° | – | 60° | ... and when fast (below 90° the body makes lift) |
 | `aoaBlendSpeed` | [1000 2500] m/s | – | same | speeds between which the angle blends |
 | `CLside` | 0 | 0 | 1.0 | side-on lift coefficient (lift = `q·CLside·diam·L·sin α·cos α`) |
-| `noseRadius` | 2 m | 2 m | 4.5 m | effective radius for the heating estimate |
+| `noseRadius` | 2 m | 2 m | 4.5 m | effective windward radius for the heating rate |
+| `tileThick` | 25 mm | 25 mm | 25 mm | tile thickness in the 1-D model |
+| `tileRho` / `tileCp` / `tileK` | 320 kg/m³, 1000 J/(kg·K), 0.10 W/(m·K) | same | same | tile material (see section 4.8) |
+| `tileEps` | 0.85 | 0.85 | 0.85 | coating emissivity |
+| `tileT0` / `tileTenv` | 293 K / 250 K | same | same | liftoff temperature and radiative sink |
+| `tileLimitC` | 1500 °C | 1500 °C | 1500 °C | reusable surface limit. The pass/fail uses the ship |
+| `skinThick` | 4 mm | 4 mm | 4 mm | stainless skin lumped on the inner face |
+| `tileNodes` | 21 | 21 | 21 | nodes through the tile |
 | `flipAlt` | 1 km | – | 1 km | belly-flop ends, engines light and flip upright |
 | `landingName` | `'LANDING'` | `'TOWER CATCH'` | `'SPLASHDOWN'` | word used in the result line |
 
@@ -764,8 +820,9 @@ These numbers come from an independent re-implementation of the same model that 
 | Super Heavy landing burn | 13 engines (5 g cap) from 10 km (≈ 1,175 m/s), down to 3 engines at ≈ 1.2 km (≈ 94 m/s); peak load ≈ 10 g |
 | Tower catch | within about 0.1 m, ≈ 1.2 m/s down, ≈ 0.2 m/s sideways, ≈ 52 t propellant left |
 | Ship engine cut-off | t ≈ 496 s, 194 km, 7.71 km/s, trajectory −50 × 194 km, max 4 g (throttled) |
-| Ship re-entry | max ≈ 2.5 g, max q ≈ 10 kPa, peak heating ≈ 330 kW/m² at ≈ 70 km, ≈ 86 m/s at the flip (1 km) |
-| Splashdown | t ≈ 44 min, ≈ 14,800 km downrange, ≈ 1.2 m/s down, within about 1.5 m of the target |
+| Ship re-entry | max 2.5 g, max q 9.9 kPa, peak heating 328 kW/m² at 69 km, 86 m/s at the flip (1 km) |
+| Heat shield | heat load 1.578×10⁸ J/m² (158 MJ/m²), of which about 97% has been radiated away again by splashdown. Peak tile temperature 1,330 °C at T+32 min (radiative equilibrium 1,342 °C). Steel under the tiles 188 °C. **PASS**, margin 170 °C under the 1,500 °C limit. Super Heavy's heat load is 2.95×10⁶ J/m² |
+| Splashdown | t = 44.1 min, 14,812 km downrange, 1.2 m/s down, 1.5 m from the target |
 
 **Starship robustness check** (the same random errors as the Monte Carlo, applied to each vehicle's return, with the standard atmosphere, Mach drag, throttle bucket and 5 g brake cap): 8 of 8 Super Heavy catches succeeded, the worst being 0.6 m off centre, 1.6 m/s down and 0.4 m/s sideways, with at least 48 t of propellant left. 6 of 6 ship splashdowns succeeded, within 2 m of the target, all at 2.5 g.
 
@@ -793,6 +850,8 @@ These numbers come from an independent re-implementation of the same model that 
 | `Ps.entryAoADeg = 45;` | More lift: an even gentler re-entry and a longer glide. |
 | In the Starship script: `S.perigee = 150e3` | The ship reaches a real orbit and never comes back down (the re-entry phase times out). |
 | In the Starship script: `Ps.flipAlt = 500` | A later flip; does the ship still have time to stop? |
+| `Ps.tileEps = 0.7` after STEP 1 | A duller coating: higher tile temperature and a smaller margin against 1,500 °C. |
+| `Ps.tileLimitC = 1400` | The same flight, judged against the low end of the 1,400–1,600 °C band. |
 
 ---
 
@@ -807,7 +866,7 @@ These numbers come from an independent re-implementation of the same model that 
   - Cd changes only between "climbing" and "falling"
 - **Rigid rod.** There's no propellant slosh, no bending, and no change in the center of gravity as fuel burns. Inertia uses `m·L²/12`.
 - **Actuators are instantaneous.** The gimbal and RCS have no lag or rate limits. Engine ignition and shutdown are instant.
-- **Simple heating estimate.** `heatFlux.m` gives the classic Sutton-Graves stagnation-point estimate for display only. It does not affect the flight, and the entry-burn timing is fixed by parameters, not by a heat-load limit.
+- **Heat shield.** `heatFlux.m` is a cold-wall Sutton-Graves rate, used as the windward flux with one effective radius. The tile model is one-dimensional, with constant properties, a perfect bond to a 4 mm steel sheet, and an adiabatic cabin side. It leaves out hot-wall relief, tile gaps, pins, coating recession and sunlight. It does not feed back into the trajectory, and it does not choose a burn time.
 - **Ideal steering for the two-stage stack and Stage 2.** Point masses with no attitude dynamics; only the booster has full rotation.
 - **Drone ship placement** uses the predicted impact point after the entry burn, not a pre-launch plan. Starship's splashdown target is placed the same way, at the flip.
 - **Starship engines are simplified.** Each engine-count change (33 → 13 → 3 on the booster, the ship's 6 engines treated as one average engine) is instant. The booster's arrival is also a straight catch: the real one approaches offset from the tower and slides in.
@@ -828,7 +887,7 @@ Roughly from easiest to hardest:
 | **Earth's rotation** (about +420 m/s eastward at Starbase's latitude) | Free speed at launch, and the ship lands in a different place | initial `vx` and the Coriolis terms |
 | **Throttle and gimbal rate limits, engine start-up delay** | Real engines take ~1–3 s to spool up | `attitudeControl`, `boosterDynamics` |
 | **Moving centre of gravity and propellant slosh** | Changes how the vehicle turns as the tanks drain | `attitudeControl` (inertia and lever arm) |
-| **Heat-shield temperature and heat load** (integrate `heatFlux`) | Shows whether the tiles survive, and lets entry timing follow heating limits | post-processing, or a new state |
+| ~~Heat-shield temperature and heat load~~ | **Done** (`heatShield.m`). Reported only; it does not set a burn time | |
 | **Bank-angle steering in 3-D** (crossrange, roll reversals) | The real ship steers its lift to hit its target, like the Space Shuttle | a 3-D state vector (big change) |
 | **Booster approach offset** (aim beside the tower, slide in at the end) | Protects the tower if something goes wrong; this is what SpaceX does | `landingAccel` target |
 
@@ -839,7 +898,9 @@ Roughly from easiest to hardest:
 | Problem | Fix |
 |---|---|
 | `Undefined function 'simulateBooster'` | All `.m` files must be in the **Current Folder**. Double-click the folder in the Files panel. |
+| A plot command does the wrong thing, or looks like the Octave stand-in | An `octave/` folder is on MATLAB's path. Run `octaveCompat`, or `rmpath` that folder, then `clear functions`. Prefer not to `addpath(genpath(...))` on this project. |
 | Octave: `'tiledlayout' undefined` (or `yline`, `yyaxis` ...) | You called a plotting function directly before running a script. Run `octaveCompat` once, or run any of the scripts first. |
+| Octave: warning about `arguments` blocks | Expected. Octave skips the input checks in `heatShield` and `plotHeatShield`. Use MATLAB for those. |
 | Octave: `rocket_app needs MATLAB` | Expected: the slider app uses MATLAB's `uifigure`, which Octave doesn't have. |
 | Mission-control panels look small | Maximize the figure window, or undock it (MATLAB Online opens figures in a docked panel). Lower `speed` in STEP 9 if your browser struggles to keep up. |
 | Animation is choppy | Browser rendering is slower than desktop MATLAB. Raise `speedup` (e.g. 20), or set `playAnimation = false`. |
@@ -875,6 +936,9 @@ Roughly from easiest to hardest:
 | **Boostback** | Burn that reverses the booster's horizontal velocity to return toward the launch site. |
 | **Dynamic pressure (q)** | ½ρv², the aerodynamic "push". Max-Q is the point of peak stress. |
 | **Entry burn** | Burn before re-entering dense air, to reduce heating and loads. |
+| **Heat load** | Heating rate integrated over time, in J/m². How much energy the flow delivers per square metre. |
+| **Radiative equilibrium** | Surface temperature at which incoming heat is exactly balanced by thermal radiation. |
+| **Heat shield** | The tiles (and the steel under them) that take the re-entry heat. |
 | **Gimbal** | Swiveling the engine nozzle to steer. |
 | **Gravity turn** | Ascent where thrust follows velocity and gravity bends the path over. |
 | **Grid fins** | Lattice-shaped control surfaces used during descent. |
