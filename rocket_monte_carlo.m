@@ -12,7 +12,7 @@
 % Runtime: roughly 1-3 s per flight in MATLAB Online. Start with N = 50.
 
 clear; close all; clc
-octaveCompat();          % also runs in GNU Octave (no-op in MATLAB)
+octaveCompat();          % keeps Octave shims off the MATLAB path
 
 %% STEP 1 - Settings
 N = 50;              % number of flights
@@ -34,7 +34,6 @@ D = struct('thrust', zeros(N,1), 'Isp', zeros(N,1), 'Cd', zeros(N,1), ...
            'dry', zeros(N,1), 'wind', zeros(N,1));
 trajX = cell(N,1); trajH = cell(N,1);
 
-verdict = {'LANDED', 'FAILED'};
 tic
 for i = 1:N
     % 2a. Draw random errors (randn = normal distribution, mean 0, std 1)
@@ -58,8 +57,13 @@ for i = 1:N
     D.dry(i)    = P.dryScale;    D.wind(i) = P.wind;
     trajX{i} = out.X(:,1); trajH{i} = out.X(:,2);
 
+    if M.success
+        word = 'LANDED';
+    else
+        word = 'FAILED';
+    end
     fprintf('Run %3d/%d  %-7s miss %6.2f m  vVert %5.2f  vHoriz %5.2f  tilt %5.2f deg\n', ...
-            i, N, verdict{2 - M.success}, M.miss, M.vVert, M.vHoriz, M.tiltDeg);
+            i, N, word, M.miss, M.vVert, M.vHoriz, M.tiltDeg);
 end
 fprintf('Monte Carlo took %.0f s.\n', toc);
 
@@ -113,6 +117,6 @@ nexttile; histogram(R.propLeft, 15); xlabel('Propellant left [kg]'); ylabel('Fli
 title('Propellant margin'); grid on
 
 % 4f. Sensitivity: which error drives the miss? (wind vs miss)
-nexttile; scatter(D.wind, R.miss, 30, D.Cd, 'filled'); cb = colorbar; ylabel(cb, 'Cd scale');
+nexttile; scatter(D.wind, R.miss, 30, D.Cd, 'filled'); cb = colorbar; cb.Label.String = 'Cd scale';
 xlabel('Wind at 10 km [m/s]'); ylabel('Miss distance [m]');
 title('Sensitivity: wind & drag'); grid on

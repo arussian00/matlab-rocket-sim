@@ -15,14 +15,15 @@ function animateStarship(B, Sh, tSep, speed, fps, gifFile)
 %               in both cameras: the full stack on the pad, hot staging, the
 %               tower catch, the belly-flop and the flip.
 %   Rows 2-3  : altitude, speed, g-load, dynamic pressure, throttle, angle
-%               of attack, mass and heating of both vehicles. Every graph
-%               grows as the flight plays.
+%               of attack, mass, and heating. The heating panel also draws
+%               the ship's tile temperature (right axis) and the running
+%               heat load. Every graph grows as the flight plays.
 %   Time runs faster during the quiet parts (shown as "time x...").
 
 if nargin < 4 || isempty(speed), speed = 1;  end
 if nargin < 5 || isempty(fps),   fps   = 20; end
 if nargin < 6,                   gifFile = ''; end
-octaveCompat();                                   % Octave support (no-op in MATLAB)
+octaveCompat();                                   % keeps Octave shims off the MATLAB path
 Pb = B.P;  Ps = Sh.P;
 cB = [0.85 0.25 0.15];                 % Super Heavy colour in graphs
 cS = [0.10 0.35 0.85];                 % Starship colour in graphs
@@ -52,11 +53,19 @@ b = sampleFlight(B, tf, Pb);
 s = sampleFlight(Sh, tf, Ps);
 s.thr(tf <= tSep) = 0;                             % ship engines light at separation
 b.thr(tf > tCatch) = 0;  s.thr(tf >= Sh.t(end)) = 0;
+% Tile temperature and heat load on the real flight times, then onto frames.
+% Frame times are warped, so the thermal model must not be integrated there.
+hsS = heatShield(Sh.t, Sh.X(:,2), hypot(Sh.X(:,3), Sh.X(:,4)), Ps);
+[tuH, iuH] = unique(Sh.t, 'last');
+tqH = min(max(tf, tuH(1)), tuH(end));
+s.Tsurf = interp1(tuH, hsS.Tsurf(iuH), tqH);
+s.Qload = interp1(tuH, hsS.Q(iuH), tqH);
 % Once caught, the booster's flight data stops (it is held by the tower)
 for f = {'gL', 'q', 'thr', 'aoa', 'heat'}
     b.(f{1})(tf > tCatch + 1) = NaN;
     s.(f{1})(tf > Sh.t(end) + 1) = NaN;
 end
+s.Tsurf(tf > Sh.t(end) + 1) = NaN;
 xPad = Pb.xPad;                                    % tower position
 
 % Where to draw the ship: on top of the booster until separation, then
@@ -83,8 +92,8 @@ ev  = missionEvents(B, Sh, tSep);                  % for the event log
 
 %% STEP 3 - Build the mission-control window (12 panels)
 fig = figure('Name', 'Starship flight test - mission control', 'Color', 'w', ...
-             'Position', [20 20 1600 900]);
-col = [0.035 0.285 0.535 0.785];  wid = 0.20;      % 4 columns
+             'Position', [20 20 1680 940]);
+col = [0.035 0.275 0.515 0.755];  wid = 0.195;     % 4 columns, room for the tile axis
 % Top row (taller): overview, Earth view, two cameras
 axO = axes('Position', [col(1) 0.66 wid 0.29]);
 axE = axes('Position', [col(2) 0.66 wid 0.29]);
@@ -138,6 +147,20 @@ set(axT{7}, 'YScale', 'log');
 set(axT{6}, 'YLim', [0 180], 'YTick', 0:45:180);
 set(axT{5}, 'YLim', [0 110]);
 
+% Heating panel: flux stays on the left, ship tile temperature on the right,
+% with the reuse limit and the running heat load written in the corner.
+% plot/yline/ylabel go to whichever side yyaxis has active, so they are
+% called without an axes handle (passing the handle would ignore the side).
+yyaxis(axT{8}, 'right');
+hTile = plot(nan, nan, '-', 'Color', [0.75 0.35 0.05], 'LineWidth', 1.6);
+yline(Ps.tileLimitC, '--', 'tile limit');
+ylabel('Tile [^{\circ}C]');
+set(gca, 'YColor', [0.55 0.28 0.05]);
+yyaxis(axT{8}, 'left');
+title(axT{8}, 'Heating [kW/m^2] and tile temp');
+hLoad = text(axT{8}, 0.98, 0.06, '', 'Units', 'normalized', 'FontSize', 7, ...
+    'HorizontalAlignment', 'right', 'VerticalAlignment', 'bottom', 'FontName', 'Monospaced');
+
 %% STEP 4 - Play
 for k = 1:numel(tf)
     if ~ishghandle(fig), return; end                 % window closed: stop quietly
@@ -171,6 +194,7 @@ for k = 1:numel(tf)
         if tk <= tSep, cy = b.h(k) + (Pb.L + Ps.L)/2*cos(b.th(k)); end   % whole stack in view
         drawVehicle(g.booster, [b.x(k); b.h(k)], b.th(k), b.gim(k), b.thr(k), 45);
         drawVehicle(g.ship,    [sx(k); sh(k)],   s.th(k), s.gim(k), s.thr(k), 35);
+        set(g.ship.h{2}, 'FaceColor', tileFaceColor(s.Tsurf(k), Ps.tileLimitC));
         cy  = max(cy, 0.75*W);                     % keep the ground at the bottom when low
         sky = min(max(cy, 0)/80e3, 1)^0.5;
         set(ax, 'Color', (1 - sky)*[0.53 0.81 0.98] + sky*[0.02 0.02 0.08]);
@@ -191,6 +215,17 @@ for k = 1:numel(tf)
         set(lB{j}, 'XData', tm, 'YData', yB{j}(1:k));
         set(lS{j}, 'XData', tm, 'YData', yS{j}(1:k));
         xlim(axT{j}, xl);
+    end
+    set(hTile, 'XData', tm, 'YData', s.Tsurf(1:k) - 273.15);
+    Tc = s.Tsurf(k);
+    if isnan(Tc)
+        iLast = find(~isnan(s.Tsurf(1:k)), 1, 'last');
+        if isempty(iLast), Tc = NaN; else, Tc = s.Tsurf(iLast); end
+    end
+    if isnan(Tc)
+        set(hLoad, 'String', '');
+    else
+        set(hLoad, 'String', sprintf('%4.0f C    %4.1f MJ/m^2', Tc - 273.15, s.Qload(k)/1e6));
     end
 
     drawnow
@@ -334,4 +369,18 @@ str = sprintf(['%s\nPhase : %s\nAlt   : %8.2f km\nSpeed : %8.0f m/s\n' ...
                'Throt : %6.0f %%\nPitch : %6.1f deg\nAoA   : %6.1f deg\nMass  : %8.0f t'], ...
               name, phase, v.h(k)/1e3, v.v(k), 100*thr, ...
               rad2deg(atan2(sin(v.th(k)), cos(v.th(k)))), aoa, v.m(k)/1e3);
+if isfield(v, 'Tsurf') && ~isnan(v.Tsurf(k))
+    str = sprintf('%s\nTile  : %6.0f C\nQ load: %6.1f MJ', str, ...
+        v.Tsurf(k) - 273.15, v.Qload(k)/1e6);
+end
+end
+
+function face = tileFaceColor(Tkelvin, limitC)
+% Belly tiles: black when cold, orange as they approach the reuse limit.
+if isnan(Tkelvin)
+    face = [0.22 0.22 0.25];
+    return
+end
+f = min(1, max(0, (Tkelvin - 273.15 - 200) / (limitC - 200)));
+face = (1 - f) * [0.15 0.15 0.18] + f * [1.00 0.42 0.06];
 end

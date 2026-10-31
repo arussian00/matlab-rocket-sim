@@ -12,6 +12,7 @@ function qdot = heatFlux(h, v, Rn, P)
 %   so it peaks high up, where the vehicle is still fast, not at max-q.
 %   It ignores radiation from the hot shock layer and the actual
 %   tile shape, so treat it as an order-of-magnitude guide.
+%   heatShield.m integrates this rate into a heat load and a tile temperature.
 
 k = 1.7415e-4;                      % for Earth's air, SI units
 [~, rho] = earthModel(h, P);

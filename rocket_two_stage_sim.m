@@ -15,7 +15,7 @@
 % Runs on MATLAB Online Basic (core MATLAB only).
 
 clear; close all; clc
-octaveCompat();          % also runs in GNU Octave (no-op in MATLAB)
+octaveCompat();          % keeps Octave shims off the MATLAB path
 
 %% STEP 1 - Parameters
 E = rocket_params('booster');     % reuse planet + atmosphere values

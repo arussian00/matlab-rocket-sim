@@ -90,6 +90,23 @@ P.bellyAoADeg   = 90;    % 'bellyflop' phase: body angle to the oncoming air whe
 P.entryAoADeg   = 90;    % ... and when fast (hypersonic). Below 90 the body makes lift.
 P.aoaBlendSpeed = [1000 2500];   % blend from bellyAoADeg to entryAoADeg between these speeds [m/s]
 P.noseRadius    = 2;     % effective nose radius for the heating estimate (heatFlux.m) [m]
+% Heat-shield tile, used by heatShield.m on the Starship flight. The other
+% vehicles carry the same fields and ignore them (Super Heavy is bare steel).
+P.tileThick     = 0.025;   % thickness [m]. About an inch, the depth at the tile edge.
+P.tileRho       = 320;     % density [kg/m^3]. Toughened silica, in the Shuttle LI-2200 range.
+P.tileCp        = 1000;    % specific heat [J/(kg·K)]
+P.tileK         = 0.10;    % conductivity [W/(m·K)]. One hot-tile value, pores included.
+P.tileEps       = 0.85;    % emissivity of the black coating
+P.tileNodes     = 21;      % nodes through the thickness in the 1-D model
+P.tileT0        = 293.15;  % temperature at liftoff [K]
+P.tileTenv      = 250;     % radiative sink [K] (a round Earth-infrared temperature)
+P.tileLimitC    = 1500;    % reusable surface limit [C]. Middle of the 1400-1600 C
+                           % band quoted for Starship's hexagonal tiles. Shuttle
+                           % black tiles were certified near 1260 C; 1500 C is the
+                           % reuse line used here, not the top of that band.
+P.skinThick     = 0.004;   % stainless barrel the tiles are mounted on [m]
+P.skinRho       = 7930;    % 304L stainless [kg/m^3]
+P.skinCp        = 500;     % stainless specific heat [J/(kg·K)]
 P.flipAlt       = 1000;  % 'bellyflop' phase ends (engines light, flip upright) here [m]
 
 %% ---------------------------------------------------------------------
@@ -227,7 +244,8 @@ switch lower(vehicle)
         P.CLside    = 1.0;        % lift from the belly at an angle (L/D ~ 0.37 at 60 deg)
         P.entryAoADeg = 60;       % hypersonic re-entry at ~60 deg angle of attack, like the
                                   % real ship; flat (90 deg) belly-flop once below 1 km/s
-        P.noseRadius  = 4.5;      % effective radius for the heating estimate [m]
+        P.noseRadius  = 4.5;      % effective radius for the windward heating estimate [m]
+        % tileThick, tileLimitC and the other tile fields stay at the defaults.
         P.tauRCS    = 20e6;       % the four flaps steer the belly-flop
         P.gimbalMaxDeg = 15;
         P.attWn     = 1.5;        % fast flip from belly-down to upright

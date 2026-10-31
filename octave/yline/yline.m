@@ -3,6 +3,15 @@ function h = yline(varargin)
 %   yline(y), yline(y, linespec), yline(y, linespec, label), and the same
 %   with an axes first. The line always spans the axes, even after more
 %   data is plotted (a listener follows the x-limits).
+%   In MATLAB this file must not run: the call is handed to MATLAB's yline.
+if ~exist('OCTAVE_VERSION', 'builtin')
+    if nargout == 0
+        dropOctaveShim('yline', varargin{:});
+    else
+        h = dropOctaveShim('yline', varargin{:});
+    end
+    return
+end
 [ax, args] = splitAxes(varargin);
 y = args{1};  spec = '-';  label = '';
 if numel(args) >= 2, spec = args{2}; end

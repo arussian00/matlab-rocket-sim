@@ -1,7 +1,7 @@
 function fig = plotFlight(out)
 %PLOTFLIGHT  Nine-panel dashboard of a simulateBooster result.
 
-octaveCompat();                         % Octave support (no-op in MATLAB)
+octaveCompat();                         % keeps Octave shims off the MATLAB path
 P = out.P;
 t = out.t; X = out.X; a = out.aux;
 x = X(:,1); h = X(:,2); vx = X(:,3); vh = X(:,4); m = X(:,5);
